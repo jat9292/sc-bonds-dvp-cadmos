@@ -9,11 +9,9 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./Cash.sol";
 
 contract DVP is IBilateralTrade, ReentrancyGuard {
-    IRegister public register;
     Status public status;
     address public settlementOperator;
     TradeDetail public details;
-    Cash cashToken;
 
 
     /**
@@ -29,38 +27,31 @@ contract DVP is IBilateralTrade, ReentrancyGuard {
      * so controls in the constructors are to be replicated in the first interaction with a function
      */
     constructor(
-        IRegister _register,
+        address _register,
         address _buyer,
         address _seller,
         address _cashTokenAddress
     ) {
         require(
-            _register.investorsAllowed(msg.sender) ||
-                _register.isBnD(msg.sender),
+            IRegister(_register).investorsAllowed(msg.sender) ||
+                IRegister(_register).isBnD(msg.sender),
             "Sender must be a valid investor"
         );
 
         require(
-            _register.investorsAllowed(_buyer),
+            IRegister(_register).investorsAllowed(_buyer),
             "Buyer must be a valid investor"
         );
 
-        register = _register;
         settlementOperator = msg.sender;
         details.buyer = _buyer;
         details.seller = _seller;
+        details.cashToken = _cashTokenAddress;
+        details.securityToken = _register;
         bytes8 paymentID_ = paymentID();
         details.paymentID = paymentID_;
         status = Status.Draft;
-        cashToken = Cash(_cashTokenAddress);
-        emit NotifyTrade(msg.sender, _buyer, status, 0, 0, paymentID_);
-    }
-
-    /**
-     * @dev gets the buyer address
-     */
-    function buyerAccount() public view returns (address) {
-        return details.buyer;
+        emit NotifyTrade(msg.sender, _buyer, status, 0, 0, paymentID_, new bytes(0));
     }
 
     /**
@@ -77,9 +68,9 @@ contract DVP is IBilateralTrade, ReentrancyGuard {
      can be called only if buyer updated is whitelisted
     */
     function setDetails(
-        TradeDetail memory _details,
-        uint _requestedCash
+        TradeDetail memory _details
     ) public {
+        IRegister register =IRegister(details.securityToken);
         require(
             msg.sender == settlementOperator,
             "Only the settlementOperator can update this trade"
@@ -96,6 +87,17 @@ contract DVP is IBilateralTrade, ReentrancyGuard {
             register.investorsAllowed(_details.seller),
             "Seller must be a valid investor even on changing details"
         );
+        
+        require(
+            details.cashToken == _details.cashToken,
+            "Cannot Change CashToken Address"
+        );
+        require(
+            register == _details.securityToken,
+            "Cannot Change securityToken Address"
+        );
+
+
         details = _details;
         // an event needs to be generated to enable the back end to know that the trade has been changed
         emit NotifyTrade(
@@ -104,10 +106,9 @@ contract DVP is IBilateralTrade, ReentrancyGuard {
             status,
             _details.quantity,
             _details.price,
-            _details.paymentID
+            _details.paymentID,
+            new bytes(0)
         );
-        requestedCash = _requestedCash;
-        emit RequestedCash(_requestedCash);
     }
 
     /**
@@ -139,9 +140,10 @@ contract DVP is IBilateralTrade, ReentrancyGuard {
                 status,
                 _details.quantity,
                 _details.price,
-                _details.paymentID
+                _details.paymentID,
+                new bytes(0)
             );
-            emit RequestedCash(_details.quantity*_details.price);
+            emit RequestedCash(_details.quantity*_details.price*(10**cashToken.decimals())/(10**register.decimals())
             return (status);
         }
 
@@ -154,14 +156,26 @@ contract DVP is IBilateralTrade, ReentrancyGuard {
                 status,
                 _details.quantity,
                 _details.price,
-                _details.paymentID
+                _details.paymentID,
+                new bytes(0)
             );
             return (status);
         }
 
+        require(false, "the trade cannot be approved in this current status");
+        return (status);
+    }
+
+
+    function executeDVP(bytes metadata) public returns (Status) {
+        _details = details;
+        requires(
+            keccak256(metadata)==_details.encryptedMetadaHash,
+            "Metadata doe not match committed hasg")
         if (msg.sender == settlementOperator && status == Status.Accepted) {
-            _details = details;
             status = Status.Executed;
+            IRegister register =IRegister(details.securityToken);
+            Cash cashToken = Cash(details.cashToken);
             require(
                 register.transferFrom(
                     _details.seller,
@@ -174,7 +188,7 @@ contract DVP is IBilateralTrade, ReentrancyGuard {
                 cashToken.transferFrom(
                     _details.buyer,
                     _details.seller,
-                    _details.quantity*_details.price
+                    _details.quantity*_details.price*(10**cashToken.decimals())/(10**register.decimals())
                 ),
                 "the cash transfer has failed"
             );
@@ -184,13 +198,15 @@ contract DVP is IBilateralTrade, ReentrancyGuard {
                 status,
                 _details.quantity,
                 _details.price,
-                _details.paymentID
+                _details.paymentID,
+                metadata
             );
             return (status);
         }
         require(false, "the trade cannot be approved in this current status");
         return (status);
-    }
+    }    
+
 
     /**
      * @dev enables the rejection of the bilateral trade in 2 possibilites :
@@ -211,7 +227,8 @@ contract DVP is IBilateralTrade, ReentrancyGuard {
                 status,
                 _details.quantity,
                 _details.price,
-                _details.paymentID
+                _details.paymentID,
+                new bytes(0)
             );
             return;
         }
@@ -227,7 +244,23 @@ contract DVP is IBilateralTrade, ReentrancyGuard {
                 status,
                 _details.quantity,
                 _details.price,
-                _details.paymentID
+                _details.paymentID,
+                new bytes(0)
+            );
+            return;
+        }
+        if (
+            msg.sender == settlementOperator && status == Status.Accepted
+        ) {
+            status = Status.Rejected;
+            emit NotifyTrade(
+                _details.seller,
+                _details.buyer,
+                status,
+                _details.quantity,
+                _details.price,
+                _details.paymentID,
+                new bytes(0)
             );
             return;
         }
