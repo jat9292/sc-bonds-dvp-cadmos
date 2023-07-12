@@ -7,11 +7,14 @@ interface ITrade {
   enum Status {Draft, Pending, Rejected, Accepted, Executed, Paid}
   
   struct TradeDetail {
+    bytes encryptedMetada,
     uint256 quantity;
     address buyer;
+    address seller;
     uint256 tradeDate;
     uint256 valueDate;
     uint256 price;
+    bytes8 paymentID;
   }
 
   function register() external view returns (IRegister);
@@ -21,5 +24,5 @@ interface ITrade {
   function sellerAccount() external view returns (address);
   function buyerAccount() external view returns (address);
 
-  event NotifyTrade(address indexed seller, address indexed buyer, Status indexed status, uint256 quantity);
+  event NotifyTrade(address indexed seller, address indexed buyer, Status indexed status, uint256 quantity, uint256 price, bytes8 paymentID;);
 }

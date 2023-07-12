@@ -11,19 +11,17 @@ import "./Cash.sol";
 contract DVP is IBilateralTrade, ReentrancyGuard {
     IRegister public register;
     Status public status;
-    address public sellerAccount;
+    address public settlementOperator;
     TradeDetail public details;
-    uint requestedCash;
     Cash cashToken;
 
-    event RequestedCash(uint indexed requestedCash);
 
     /**
      * @dev when the smart contract deploys :
      * - we check that deployer has been whitelisted
      * - we check that buyer has been whitelisted
      * - we map the register contract to interact with it
-     * - variable sellerAccount gets msg.sender address
+     * - variable settlementOperator gets msg.sender address
      * - details struct buyer gets buyer address
      * - status of current contract is Draft
      * The constructor cannot be checked by the register by looking ain the hash of
@@ -33,7 +31,7 @@ contract DVP is IBilateralTrade, ReentrancyGuard {
     constructor(
         IRegister _register,
         address _buyer,
-        uint _requestedCash,
+        address _seller,
         address _cashTokenAddress
     ) {
         require(
@@ -48,13 +46,14 @@ contract DVP is IBilateralTrade, ReentrancyGuard {
         );
 
         register = _register;
-        sellerAccount = msg.sender;
+        settlementOperator = msg.sender;
         details.buyer = _buyer;
+        details.seller = _seller;
+        bytes8 paymentID_ = paymentID();
+        details.paymentID = paymentID_;
         status = Status.Draft;
         cashToken = Cash(_cashTokenAddress);
-        emit NotifyTrade(msg.sender, _buyer, status, 0);
-        requestedCash = _requestedCash;
-        emit RequestedCash(_requestedCash);
+        emit NotifyTrade(msg.sender, _buyer, status, 0, 0, paymentID_);
     }
 
     /**
@@ -65,7 +64,7 @@ contract DVP is IBilateralTrade, ReentrancyGuard {
     }
 
     /**
-     * @dev produces a unique payiment identifier
+     * @dev produces a unique payment identifier
      */
     function paymentID() public view returns (bytes8) {
         uint64 low = uint64(uint160(address(this)));
@@ -82,8 +81,8 @@ contract DVP is IBilateralTrade, ReentrancyGuard {
         uint _requestedCash
     ) public {
         require(
-            msg.sender == sellerAccount,
-            "Only the seller can update this trade"
+            msg.sender == settlementOperator,
+            "Only the settlementOperator can update this trade"
         );
         require(
             status == Status.Draft,
@@ -93,23 +92,22 @@ contract DVP is IBilateralTrade, ReentrancyGuard {
             register.investorsAllowed(_details.buyer),
             "Buyer must be a valid investor even on changing details"
         );
+        require(
+            register.investorsAllowed(_details.seller),
+            "Seller must be a valid investor even on changing details"
+        );
         details = _details;
         // an event needs to be generated to enable the back end to know that the trade has been changed
         emit NotifyTrade(
-            sellerAccount,
+            _details.seller,
             _details.buyer,
             status,
-            _details.quantity
+            _details.quantity,
+            _details.price,
+            _details.paymentID
         );
         requestedCash = _requestedCash;
         emit RequestedCash(_requestedCash);
-    }
-
-    /**
-     * @dev gets the bilateral trade details
-     */
-    function getDetails() public view returns (TradeDetail memory) {
-        return details;
     }
 
     /**
@@ -122,7 +120,7 @@ contract DVP is IBilateralTrade, ReentrancyGuard {
      * --> status becomes Accepted and emits an event
      */
     function approve() public returns (Status) {
-        if (msg.sender == sellerAccount && status == Status.Draft) {
+        if (msg.sender == details.seller && status == Status.Draft) {
             require(details.quantity > 0, "quantity not defined");
             require(details.tradeDate > 0, "trade date not defined");
             // Remove the control because it is functionally possible to need to create a back value trade
@@ -134,41 +132,60 @@ contract DVP is IBilateralTrade, ReentrancyGuard {
             //     "value date not defined greater or equal than the trade date"
             // );
             status = Status.Pending;
+            _details = details;
             emit NotifyTrade(
-                sellerAccount,
-                details.buyer,
+                _details.seller,
+                _details.buyer,
                 status,
-                details.quantity
+                _details.quantity,
+                _details.price,
+                _details.paymentID
             );
-            emit RequestedCash(requestedCash);
+            emit RequestedCash(_details.quantity*_details.price);
             return (status);
         }
 
         if (msg.sender == details.buyer && status == Status.Pending) {
+            status = Status.Accepted;
+            _details = details;
+            emit NotifyTrade(
+                _details.seller,
+                _details.buyer,
+                status,
+                _details.quantity,
+                _details.price,
+                _details.paymentID
+            );
+            return (status);
+        }
+
+        if (msg.sender == settlementOperator && status == Status.Accepted) {
+            _details = details;
+            status = Status.Executed;
             require(
                 register.transferFrom(
-                    sellerAccount,
-                    details.buyer,
-                    details.quantity
+                    _details.seller,
+                    _details.buyer,
+                    _details.quantity
                 ),
                 "the bond transfer has failed"
             );
             require(
                 cashToken.transferFrom(
-                    details.buyer,
-                    sellerAccount,
-                    requestedCash
+                    _details.buyer,
+                    _details.seller,
+                    _details.quantity*_details.price
                 ),
                 "the cash transfer has failed"
             );
             emit NotifyTrade(
-                sellerAccount,
-                details.buyer,
+                _details.seller,
+                _details.buyer,
                 status,
-                details.quantity
+                _details.quantity,
+                _details.price,
+                _details.paymentID
             );
-            emit RequestedCash(requestedCash);
-            status = Status.Executed;
             return (status);
         }
         require(false, "the trade cannot be approved in this current status");
@@ -183,15 +200,18 @@ contract DVP is IBilateralTrade, ReentrancyGuard {
      * --> status becomes Rejected and emits an event
      */
     function reject() public {
+        _details = details;
         require(status != Status.Rejected, "Trade already rejected");
         // seller can cancel the trade at any active state before the trade is executed
-        if (msg.sender == sellerAccount && (status != Status.Executed)) {
+        if (msg.sender == _details.seller && (status != Status.Executed)) {
             status = Status.Rejected;
             emit NotifyTrade(
-                sellerAccount,
-                details.buyer,
+                _details.seller,
+                _details.buyer,
                 status,
-                details.quantity
+                _details.quantity,
+                _details.price,
+                _details.paymentID
             );
             return;
         }
@@ -202,10 +222,12 @@ contract DVP is IBilateralTrade, ReentrancyGuard {
         ) {
             status = Status.Rejected;
             emit NotifyTrade(
-                sellerAccount,
-                details.buyer,
+                _details.seller,
+                _details.buyer,
                 status,
-                details.quantity
+                _details.quantity,
+                _details.price,
+                _details.paymentID
             );
             return;
         }
