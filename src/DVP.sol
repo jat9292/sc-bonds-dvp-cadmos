@@ -9,8 +9,11 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./Cash.sol";
 
 contract DVP is IBilateralTradeDVP, ReentrancyGuard {
+    
+    FirstApprover first;
     Status public status;
     address public settlementOperator;
+    address secondApprover;
     TradeDetailDVP public details;
     event RequestedCash(uint indexed requestedCash);
 
@@ -129,6 +132,24 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
     }
 
     /**
+     * @dev compare equality of two TradeDetailDVP structs :
+     * This is called inside the first approve and is necessary to avoid the corner case in which the settlement operator front-runs (unintentionally) 
+     * the first trader (buyer or seller) by calling setDetails right before the first trader calls approve.
+     */
+    function checkTradeDetails(TradeDetailDVP memory _details, TradeDetailDVP memory _detailscopy) internal{
+        return (_details.encryptedMetadaHash==_detailscopy.encryptedMetadaHash &&
+        _details.quantity==_detailscopy.quantity &&
+        _details.price==_detailscopy.price &&
+        _details.cashToken==_detailscopy.cashToken &&
+        _details.securityToken==_detailscopy.securityToken &&
+        _details.buyer==_detailscopy.buyer &&
+        _details.seller==_detailscopy.seller &&
+        _details.tradeDate==_detailscopy.tradeDate &&
+        _details.valueDate==_detailscopy.valueDate &&
+        _details.paymentID==_detailscopy.paymentID)
+    }
+
+    /**
      * @dev enables the approval of the bilateral trade in 2 steps :
      * 1) caller is seller account address and smart contract is in status Draft
      * --> status becomes Pending and emits an event
@@ -137,9 +158,10 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
      ** --> NEW (DVP) Cash Token is transfered from buyer to seller (buyer must pre-approve the cash token on DVP contract)
      * --> status becomes Accepted and emits an event
      */
-    function approve() public returns (Status) {
+    function approve(TradeDetailDVP memory _detailscopy) public returns (Status) {
         TradeDetailDVP memory _details = details;
-        if (msg.sender == details.seller && status == Status.Draft) {
+        if ((msg.sender == _details.seller || msg.sender == _details.buyer) && status == Status.Draft) {
+            require(checkTradeDetails(_details,_detailscopy)); // This check is necessary to avoid the first agent (buyer or seller) getting front-runned (might be unintentional) by the settlement operator who could still call setDetails
             require(details.quantity > 0, "quantity not defined");
             require(details.tradeDate > 0, "trade date not defined");
             // Remove the control because it is functionally possible to need to create a back value trade
@@ -150,6 +172,13 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
             //     details.valueDate >= details.tradeDate,
             //     "value date not defined greater or equal than the trade date"
             // );
+            
+            if (msg.sender == _details.seller) {
+                secondApprover=_details.buyer;
+                } else {
+                secondApprover=_details.seller;
+            }
+            
             status = Status.Pending;
             emit NotifyTradeDVP(
                 _details.seller,
@@ -169,8 +198,8 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
             );
             return (status);
         }
-
-        if ((msg.sender == details.buyer && status == Status.Pending )|| status == Status.Accepted) {
+        if 
+        if ((msg.sender == secondApprover && status == Status.Pending )|| status == Status.Accepted) {
             if (status == Status.Pending){
                 status = Status.Accepted;
                 emit NotifyTradeDVP(
@@ -183,7 +212,7 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
                     _details.encryptedMetadaHash
                 );
             }
-            if (msg.sender==settlementOperator){ // If Buyer is same as SettlementOperator, do directly the atomic swap
+            if (msg.sender==settlementOperator){ // If secondApprover is same as SettlementOperator, do directly the atomic swap
                 require(
                     register.transferFrom(
                         _details.seller,
