@@ -14,7 +14,6 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
     TradeDetailDVP public details;
     event RequestedCash(uint indexed requestedCash);
 
-
     /**
      * @dev when the smart contract deploys :
      * - we check that deployer has been whitelisted
@@ -52,7 +51,15 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
         bytes8 paymentID_ = paymentID();
         details.paymentID = paymentID_;
         status = Status.Draft;
-        emit NotifyTradeDVP(msg.sender, _buyer, status, 0, 0, paymentID_, new bytes(0));
+        emit NotifyTradeDVP(
+            msg.sender,
+            _buyer,
+            status,
+            0,
+            0,
+            paymentID_,
+            0
+        );
     }
 
     /**
@@ -69,9 +76,16 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
      can be called only if buyer updated is whitelisted
     */
     function setDetails(
-        TradeDetailDVP memory _details
+        TradeDetailDVP memory _details,
+        bytes memory encryptedMetadata,
+        EncryptedAESwithECIES[3] encryptedSymmetricKeyForEachActor
     ) public {
-        IRegister register =IRegister(details.securityToken);
+        TradeDetailDVP memory _details = details;
+        require(
+            keccak256(encryptedMetadata) == _details.encryptedMetadaHash,
+            "Metadata doe not match committed hash"
+        );
+        IRegister register = IRegister(details.securityToken);
         require(
             msg.sender == settlementOperator,
             "Only the settlementOperator can update this trade"
@@ -88,7 +102,7 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
             register.investorsAllowed(_details.seller),
             "Seller must be a valid investor even on changing details"
         );
-        
+
         require(
             details.cashToken == _details.cashToken,
             "Cannot Change CashToken Address"
@@ -98,8 +112,9 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
             "Cannot Change securityToken Address"
         );
 
-
         details = _details;
+        bytes8 paymentID_ = paymentID();
+        details.paymentID = paymentID_;
         // an event needs to be generated to enable the back end to know that the trade has been changed
         emit NotifyTradeDVP(
             _details.seller,
@@ -107,9 +122,10 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
             status,
             _details.quantity,
             _details.price,
-            _details.paymentID,
-            new bytes(0)
+            paymentID_,
+            _details.encryptedMetadaHash
         );
+        emit EncryptedMetaData(encryptedMetada,encryptedMetadaHash,encryptedSymmetricKeyForEachActor);
     }
 
     /**
@@ -142,73 +158,72 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
                 _details.quantity,
                 _details.price,
                 _details.paymentID,
-                new bytes(0)
+                _details.encryptedMetadaHash
             );
-            IRegister register =IRegister(details.securityToken);
+            IRegister register = IRegister(details.securityToken);
             Cash cashToken = Cash(details.cashToken);
-            emit RequestedCash(_details.quantity*_details.price*(10**cashToken.decimals())/(10**register.decimals()));
+            emit RequestedCash(
+                (_details.quantity *
+                    _details.price *
+                    (10 ** cashToken.decimals())) / (10 ** register.decimals())
+            );
             return (status);
         }
 
-        if (msg.sender == details.buyer && status == Status.Pending) {
-            status = Status.Accepted;
-            emit NotifyTradeDVP(
-                _details.seller,
-                _details.buyer,
-                status,
-                _details.quantity,
-                _details.price,
-                _details.paymentID,
-                new bytes(0)
-            );
+        if ((msg.sender == details.buyer && status == Status.Pending )|| status == Status.Accepted) {
+            if (status == Status.Pending){
+                status = Status.Accepted;
+                emit NotifyTradeDVP(
+                    _details.seller,
+                    _details.buyer,
+                    status,
+                    _details.quantity,
+                    _details.price,
+                    _details.paymentID,
+                    _details.encryptedMetadaHash
+                );
+            }
+            if (msg.sender==settlementOperator){ // If Buyer is same as SettlementOperator, do directly the atomic swap
+                require(
+                    register.transferFrom(
+                        _details.seller,
+                        _details.buyer,
+                        _details.quantity
+                    ),
+                    "the bond transfer has failed"
+                );
+                require(
+                    cashToken.transferFrom(
+                        _details.buyer,
+                        _details.seller,
+                        (_details.quantity *
+                            _details.price *
+                            (10 ** cashToken.decimals())) /
+                            (10 ** register.decimals())
+                    ),
+                    "the cash transfer has failed"
+                )
+                status = Status.Executed;
+                emit NotifyTradeDVP(
+                    _details.seller,
+                    _details.buyer,
+                    status,
+                    _details.quantity,
+                    _details.price,
+                    _details.paymentID,
+                    _details.encryptedMetadaHash
+                );
+                return (status)
+            ;}
+            return (status)
+            }
+
             return (status);
         }
 
         require(false, "the trade cannot be approved in this current status");
         return (status);
     }
-
-
-    function executeDVP(bytes memory metadata) public returns (Status) {
-        TradeDetailDVP memory _details = details;
-        require(
-            keccak256(metadata)==_details.encryptedMetadaHash,
-            "Metadata doe not match committed hash");
-        if (msg.sender == settlementOperator && status == Status.Accepted) {
-            status = Status.Executed;
-            IRegister register =IRegister(details.securityToken);
-            Cash cashToken = Cash(details.cashToken);
-            require(
-                register.transferFrom(
-                    _details.seller,
-                    _details.buyer,
-                    _details.quantity
-                ),
-                "the bond transfer has failed"
-            );
-            require(
-                cashToken.transferFrom(
-                    _details.buyer,
-                    _details.seller,
-                    _details.quantity*_details.price*(10**cashToken.decimals())/(10**register.decimals())
-                ),
-                "the cash transfer has failed"
-            );
-            emit NotifyTradeDVP(
-                _details.seller,
-                _details.buyer,
-                status,
-                _details.quantity,
-                _details.price,
-                _details.paymentID,
-                metadata
-            );
-            return (status);
-        }
-        require(false, "the trade cannot be approved in this current status");
-        return (status);
-    }    
-
 
     /**
      * @dev enables the rejection of the bilateral trade in 2 possibilites :
@@ -230,7 +245,7 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
                 _details.quantity,
                 _details.price,
                 _details.paymentID,
-                new bytes(0)
+                _details.encryptedMetadaHash
             );
             return;
         }
@@ -247,13 +262,11 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
                 _details.quantity,
                 _details.price,
                 _details.paymentID,
-                new bytes(0)
+                _details.encryptedMetadaHash
             );
             return;
         }
-        if (
-            msg.sender == settlementOperator && status == Status.Accepted
-        ) {
+        if (msg.sender == settlementOperator && (status != Status.Executed)) {
             status = Status.Rejected;
             emit NotifyTradeDVP(
                 _details.seller,
@@ -262,7 +275,7 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
                 _details.quantity,
                 _details.price,
                 _details.paymentID,
-                new bytes(0)
+                _details.encryptedMetadaHash
             );
             return;
         }
