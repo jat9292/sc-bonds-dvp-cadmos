@@ -30,8 +30,10 @@
   "dependencies": {
     "@openzeppelin/contracts": "^4.3.2",
     "@saturn-chain/smart-contract": "^1.0.18",
+    "@types/pako": "^2.0.0",
     "eccrypto": "^1.1.6",
-    "eth-crypto": "^2.6.0"
+    "eth-crypto": "^2.6.0",
+    "pako": "^2.1.0"
   },
   "mocha": {
     "spec": [

@@ -1,6 +1,8 @@
 import crypto from "crypto";
 import EthCrypto from "eth-crypto";
+import pako from "pako";
 
+const COMPRESSION = true;
 // Generate a random key
 let AESKey = crypto.randomBytes(32); // AES-256
 console.log("Key:", AESKey.toString("hex"));
@@ -21,7 +23,15 @@ Time
 let iv = crypto.randomBytes(16); // Initialization vector
 console.log(iv);
 let cipher = crypto.createCipheriv("aes-256-cbc", AESKey, iv);
-let encrypted = Buffer.concat([cipher.update(message, "utf8"), cipher.final()]);
+let encrypted: Buffer;
+if (COMPRESSION) {
+  let input = Buffer.from(message, "utf-8");
+  // Compress the data
+  let compressed = pako.deflate(input);
+  encrypted = Buffer.concat([cipher.update(compressed), cipher.final()]);
+} else {
+  encrypted = Buffer.concat([cipher.update(message, "utf8"), cipher.final()]);
+}
 
 console.log("Encrypted Message:", encrypted.toString("hex"));
 
@@ -81,6 +91,7 @@ async function main() {
     privateKeySeller
   ); // decryptedAES = [AES_key, iv]
   let AESkey_ = decryptedAES.split("IV")[0];
+
   let iv_ = decryptedAES.split("IV")[1];
   let decipher = crypto.createDecipheriv(
     "aes-256-cbc",
@@ -88,7 +99,13 @@ async function main() {
     Buffer.from(iv_, "hex")
   );
   let decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
-  const decrypted_msg = decrypted.toString("utf8");
+  let decrypted_msg;
+  if (COMPRESSION) {
+    const decompressed_msg = pako.inflate(decrypted);
+    decrypted_msg = Buffer.from(decompressed_msg).toString("utf-8");
+  } else {
+    decrypted_msg = decrypted.toString("utf8");
+  }
   if (
     decrypted_msg.substring(0, 64) ===
     "704512f53a4efc15864acc3cf3e4e319cf66d48723acf6bd676c1ae7919a05dc"
@@ -99,4 +116,5 @@ async function main() {
     console.log("ERROR : Message is invalid, DO NOT APROVE DVP");
   }
 }
+
 main();
