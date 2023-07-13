@@ -161,7 +161,7 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
      */
     function approve(
         TradeDetailDVP calldata _detailscopy
-    ) public returns (Status) {
+    ) public nonReentrant returns (Status) {
         TradeDetailDVP memory _details = details;
         if (
             (msg.sender == _details.seller || msg.sender == _details.buyer) &&
