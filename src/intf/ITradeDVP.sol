@@ -39,11 +39,11 @@ interface ITradeDVP {
         bytes8 paymentID,
         bytes32 encryptedMetadataHash
     );
-    struct EncryptedAESwithECIES{
-      bytes iv,
-      bytes ephemPublicKey,
-      bytes ciphertext,
-      bytes mac,
+    struct EncryptedAESwithECIES {
+        bytes iv;
+        bytes ephemPublicKey;
+        bytes ciphertext;
+        bytes mac;
     }
     event EncryptedMetaData(
         bytes encryptedMetadata,
