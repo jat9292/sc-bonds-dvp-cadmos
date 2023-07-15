@@ -155,7 +155,7 @@ describe("DVP tests", async () => {
     await dvp.connect(bnd).setDetails(
       {
         encryptedMetadaHash:
-          "0x27489e20a0060b723a1748bdff5e44570ee9fae64141728105692eac6031e8a4",
+          "0xbc36789e7a1e281436464229828f817d6612f7b477d66591ff96a9e064bcc98a",
         quantity: 1000,
         price: 1,
         cashToken: await cash.getAddress(),
