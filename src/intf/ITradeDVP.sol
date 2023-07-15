@@ -23,7 +23,6 @@ interface ITradeDVP {
         address seller;
         uint256 tradeDate;
         uint256 valueDate;
-        bytes8 paymentID;
     }
 
     function status() external view returns (Status);

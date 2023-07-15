@@ -52,10 +52,8 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
         details.seller = _seller;
         details.cashToken = _cashTokenAddress;
         details.securityToken = _register;
-        bytes8 paymentID_ = paymentID();
-        details.paymentID = paymentID_;
         status = Status.Draft;
-        emit NotifyTradeDVP(msg.sender, _buyer, status, 0, 0, paymentID_, 0);
+        emit NotifyTradeDVP(msg.sender, _buyer, status, 0, 0, 0, 0);
     }
 
     /**
@@ -110,7 +108,6 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
         cashToken = Cash(details.cashToken);
         details = _details;
         bytes8 paymentID_ = paymentID();
-        details.paymentID = paymentID_;
         // an event needs to be generated to enable the back end to know that the trade has been changed
         emit NotifyTradeDVP(
             _details.seller,
@@ -146,8 +143,7 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
             _details.buyer == _detailscopy.buyer &&
             _details.seller == _detailscopy.seller &&
             _details.tradeDate == _detailscopy.tradeDate &&
-            _details.valueDate == _detailscopy.valueDate &&
-            _details.paymentID == _detailscopy.paymentID);
+            _details.valueDate == _detailscopy.valueDate);
     }
 
     /**
@@ -195,7 +191,7 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
                 status,
                 _details.quantity,
                 _details.price,
-                _details.paymentID,
+                paymentID(),
                 _details.encryptedMetadaHash
             );
 
@@ -219,7 +215,7 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
                     status,
                     _details.quantity,
                     _details.price,
-                    _details.paymentID,
+                    paymentID(),
                     _details.encryptedMetadaHash
                 );
             }
@@ -251,7 +247,7 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
                     status,
                     _details.quantity,
                     _details.price,
-                    _details.paymentID,
+                    paymentID(),
                     _details.encryptedMetadaHash
                 );
                 return (status);
@@ -282,7 +278,7 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
                 status,
                 _details.quantity,
                 _details.price,
-                _details.paymentID,
+                paymentID(),
                 _details.encryptedMetadaHash
             );
             return;
@@ -299,7 +295,7 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
                 status,
                 _details.quantity,
                 _details.price,
-                _details.paymentID,
+                paymentID(),
                 _details.encryptedMetadaHash
             );
             return;
@@ -312,7 +308,7 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
                 status,
                 _details.quantity,
                 _details.price,
-                _details.paymentID,
+                paymentID(),
                 _details.encryptedMetadaHash
             );
             return;

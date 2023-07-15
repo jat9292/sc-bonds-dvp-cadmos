@@ -4,131 +4,173 @@ import { ethers, network } from "hardhat";
 import { expect } from "chai";
 import { makeBondDate } from "../tests/dates";
 
-let register: Register;
-let dvp: DVP;
-let primaryIssuance: PrimaryIssuance;
-let cash: Cash;
-let accounts: Signer[];
-let cak: Signer;
-let bnd: Signer;
-let custodianA: Signer;
-let custodianB: Signer;
-let investorA: Signer;
-let investorB: Signer;
-let investorC: Signer;
-let investorD: Signer;
-let centralBanker: Signer;
-let addressOfPIA: string;
-
 describe("DVP tests", async () => {
-  accounts = await ethers.getSigners();
-  cak = accounts[0];
-  bnd = accounts[1];
-  custodianA = accounts[2];
-  custodianB = accounts[3];
-  investorA = accounts[4];
-  investorB = accounts[5];
-  investorC = accounts[6];
-  investorD = accounts[7];
-  centralBanker = accounts[8];
+  let register: Register;
+  let dvp: DVP;
+  let primaryIssuance: PrimaryIssuance;
+  let cash: Cash;
+  let accounts: Signer[];
+  let cak: Signer;
+  let bnd: Signer;
+  let custodianA: Signer;
+  let custodianB: Signer;
+  let investorA: Signer;
+  let investorB: Signer;
+  let investorC: Signer;
+  let investorD: Signer;
+  let centralBanker: Signer;
+  let addressOfPIA: string;
 
-  const dates = makeBondDate(5, 1309402208 - 1309302208);
-  const bondName = "EIB 3Y 1Bn SEK";
-  const isin = "EIB3Y";
-  const expectedSupply = 1000;
-  const currency = ethers.zeroPadBytes(ethers.toUtf8Bytes("SEK"), 32);
-  const unitVal = 100000;
-  const couponRate = 0.4 * 100 * 10000;
+  beforeEach(async () => {
+    accounts = await ethers.getSigners();
+    cak = accounts[0];
+    bnd = accounts[1];
+    custodianA = accounts[2];
+    custodianB = accounts[3];
+    investorA = accounts[4];
+    investorB = accounts[5];
+    investorC = accounts[6];
+    investorD = accounts[7];
+    centralBanker = accounts[8];
+    const dates = makeBondDate(5, 1309402208 - 1309302208);
+    const bondName = "EIB 3Y 1Bn SEK";
+    const isin = "EIB3Y";
+    const expectedSupply = 1000;
+    const currency = ethers.zeroPadBytes(ethers.toUtf8Bytes("SEK"), 32);
+    const unitVal = 100000;
+    const couponRate = 0.4 * 100 * 10000;
 
-  console.log("Deploying register");
-  let RegisterFactory = await ethers.getContractFactory("Register");
+    console.log("Deploying register");
+    let RegisterFactory = await ethers.getContractFactory("Register");
 
-  register = await RegisterFactory.deploy(
-    bondName,
-    isin,
-    expectedSupply,
-    currency,
-    unitVal,
-    couponRate,
-    dates.creationDate,
-    dates.issuanceDate,
-    dates.maturityDate,
-    dates.couponDates,
-    dates.defaultCutofftime
-  );
-  console.log("ddd");
-  // Have the CAK declare the actors
-  await register.grantBndRole(await cak.getAddress()); // needed to create a dummy primary issuance smart contract
+    register = await RegisterFactory.deploy(
+      bondName,
+      isin,
+      expectedSupply,
+      currency,
+      unitVal,
+      couponRate,
+      dates.creationDate,
+      dates.issuanceDate,
+      dates.maturityDate,
+      dates.couponDates,
+      dates.defaultCutofftime
+    );
 
-  await register.grantBndRole(await bnd.getAddress());
+    // Have the CAK declare the actors
+    await register.grantBndRole(await cak.getAddress()); // needed to create a dummy primary issuance smart contract
 
-  await register.grantCstRole(await custodianA.getAddress());
+    await register.grantBndRole(await bnd.getAddress());
 
-  await register.grantCstRole(await custodianB.getAddress());
+    await register.grantCstRole(await custodianA.getAddress());
 
-  await register
-    .connect(custodianA)
-    .enableInvestorToWhitelist(await cak.getAddress()); // needed to deploy a test trade contract
+    await register.grantCstRole(await custodianB.getAddress());
 
-  await register
-    .connect(custodianA)
-    .enableInvestorToWhitelist(await investorA.getAddress());
+    await register
+      .connect(custodianA)
+      .enableInvestorToWhitelist(await cak.getAddress()); // needed to deploy a test trade contract
 
-  await register
-    .connect(custodianA)
-    .enableInvestorToWhitelist(await investorB.getAddress());
+    await register
+      .connect(custodianA)
+      .enableInvestorToWhitelist(await investorA.getAddress());
 
-  await register
-    .connect(custodianA)
-    .enableInvestorToWhitelist(await investorC.getAddress());
+    await register
+      .connect(custodianA)
+      .enableInvestorToWhitelist(await investorB.getAddress());
 
-  await register
-    .connect(custodianA)
-    .enableInvestorToWhitelist(await investorD.getAddress());
+    await register
+      .connect(custodianA)
+      .enableInvestorToWhitelist(await investorC.getAddress());
 
-  console.log("Deploying cash");
-  const cashFactory = await ethers.getContractFactory("Cash");
-  cash = await cashFactory.connect(centralBanker).deploy();
+    await register
+      .connect(custodianA)
+      .enableInvestorToWhitelist(await investorD.getAddress());
 
-  console.log(
-    "The CAK registers the PrimaryIssuance and the DVP smart contracts"
-  );
-  const primaryIssuanceFactory = await ethers.getContractFactory(
-    "PrimaryIssuance"
-  );
+    console.log("Deploying cash");
+    const cashFactory = await ethers.getContractFactory("Cash");
+    cash = await cashFactory.connect(centralBanker).deploy();
 
-  const primary = await primaryIssuanceFactory.deploy(
-    await register.getAddress(),
-    1500
-  );
+    console.log(
+      "The CAK registers the PrimaryIssuance and the DVP smart contracts"
+    );
+    const primaryIssuanceFactory = await ethers.getContractFactory(
+      "PrimaryIssuance"
+    );
 
-  let hash = await register.atReturningHash(primary.getAddress());
-  await register.enableContractToWhitelist(hash);
+    let primaryIssuanceTest = await primaryIssuanceFactory.deploy(
+      await register.getAddress(),
+      1500
+    );
 
-  const DVPFactory = await ethers.getContractFactory("DVP");
-  dvp = await DVPFactory.deploy(
-    await register.getAddress(),
-    await cak.getAddress(),
-    await cak.getAddress(),
-    await cash.getAddress()
-  );
+    let hash = await register.atReturningHash(primaryIssuanceTest.getAddress());
+    await register.enableContractToWhitelist(hash);
 
-  hash = await register.atReturningHash(dvp.getAddress());
-  await register.enableContractToWhitelist(hash);
+    const DVPFactory = await ethers.getContractFactory("DVP");
+    let dvpTest = await DVPFactory.deploy(
+      await register.getAddress(),
+      await cak.getAddress(),
+      await cak.getAddress(),
+      await cash.getAddress()
+    );
 
-  // Initialize the primary issuance account
-  await register.setExpectedSupply(1000);
+    hash = await register.atReturningHash(dvpTest.getAddress());
+    await register.enableContractToWhitelist(hash);
 
-  await register.makeReady();
+    // Initialize the primary issuance account
+    await register.setExpectedSupply(1000);
 
-  addressOfPIA = await register.primaryIssuanceAccount();
+    await register.makeReady();
+
+    addressOfPIA = await register.primaryIssuanceAccount();
+  });
 
   it("Primary issuance", async () => {
+    const balanceOfPIABefore = await register.balanceOf(addressOfPIA);
+    expect(balanceOfPIABefore).to.be.equal("1000");
+    const primaryIssuanceFactory = await ethers.getContractFactory(
+      "PrimaryIssuance"
+    );
+    primaryIssuance = await primaryIssuanceFactory
+      .connect(bnd)
+      .deploy(await register.getAddress(), 1500);
+    await primaryIssuance.connect(bnd).validate();
     const balanceOfPIA = await register.balanceOf(addressOfPIA);
-    await primary.connect(bnd).validate();
     const balanceOfBnD = await register.balanceOf(await bnd.getAddress());
     console.log(balanceOfPIA);
     expect(balanceOfPIA).to.be.equal("0");
     expect(balanceOfBnD).to.be.equal("1000");
+  });
+
+  it("DVP", async () => {
+    const DVPFactory = await ethers.getContractFactory("DVP");
+    dvp = await DVPFactory.connect(bnd).deploy(
+      await register.getAddress(),
+      await investorA.getAddress(),
+      await bnd.getAddress(),
+      await cash.getAddress()
+    );
+    await cash.connect(centralBanker).transfer(investorA, 1000);
+    const encryptedMetadata = "0x0000";
+    ethers.encodeBytes32String(encryptedMetadata);
+    await dvp.connect(bnd).setDetails(
+      {
+        encryptedMetadaHash:
+          "0x27489e20a0060b723a1748bdff5e44570ee9fae64141728105692eac6031e8a4",
+        quantity: 1000,
+        price: 1,
+        cashToken: await cash.getAddress(),
+        securityToken: await register.getAddress(),
+        buyer: await investorA.getAddress(),
+        seller: await bnd.getAddress(),
+        tradeDate: 123,
+        valueDate: 234,
+      },
+      "0x00",
+      [
+        { iv: "0x00", ephemPublicKey: "0x00", ciphertext: "0x00", mac: "0x00" },
+        { iv: "0x00", ephemPublicKey: "0x00", ciphertext: "0x00", mac: "0x00" },
+        { iv: "0x00", ephemPublicKey: "0x00", ciphertext: "0x00", mac: "0x00" },
+      ]
+    );
   });
 });
