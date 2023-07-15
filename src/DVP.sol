@@ -78,7 +78,7 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
             keccak256(encryptedMetadata) == _details.encryptedMetadaHash,
             "Metadata doe not match committed hash"
         );
-
+        register = IRegister(details.securityToken);
         require(
             msg.sender == settlementOperator,
             "Only the settlementOperator can update this trade"
@@ -92,7 +92,8 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
             "Buyer must be a valid investor even on changing details"
         );
         require(
-            register.investorsAllowed(_details.seller),
+            register.investorsAllowed(_details.seller) ||
+                register.isBnD(_details.seller),
             "Seller must be a valid investor even on changing details"
         );
 
@@ -104,7 +105,7 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
             address(register) == _details.securityToken,
             "Cannot Change securityToken Address"
         );
-        register = IRegister(details.securityToken);
+
         cashToken = Cash(details.cashToken);
         details = _details;
         bytes8 paymentID_ = paymentID();

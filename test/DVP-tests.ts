@@ -151,7 +151,7 @@ describe("DVP tests", async () => {
     );
     await cash.connect(centralBanker).transfer(investorA, 1000);
     const encryptedMetadata = "0x0000";
-    ethers.encodeBytes32String(encryptedMetadata);
+
     await dvp.connect(bnd).setDetails(
       {
         encryptedMetadaHash:
