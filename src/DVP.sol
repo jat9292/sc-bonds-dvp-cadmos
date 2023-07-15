@@ -53,7 +53,7 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
         details.cashToken = _cashTokenAddress;
         details.securityToken = _register;
         status = Status.Draft;
-        emit NotifyTradeDVP(msg.sender, _buyer, status, 0, 0, 0, 0);
+        emit NotifyTradeDVP(msg.sender, _buyer, status, 0, 0, paymentID(), 0);
     }
 
     /**
