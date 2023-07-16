@@ -18,6 +18,7 @@ interface ITradeDVP {
         uint256 quantity;
         uint256 price;
         address cashToken;
+        address cashTokenExecutor;
         address securityToken;
         address buyer;
         address seller;
@@ -29,13 +30,22 @@ interface ITradeDVP {
 
     function paymentID() external view returns (bytes8);
 
-    event NotifyTradeDVP(
-        address indexed seller,
+    event InitializedDVP(
+        address indexed settlementOperator,
         address indexed buyer,
+        address indexed seller,
+        address cashToken,
+        address cashTokenExecutor,
+        address securityToken,
+        bytes8  paymentID
+    );
+
+    event NotifyTradeDVP(
+        address indexed buyer,
+        address indexed seller,
         Status indexed status,
         uint256 quantity,
         uint256 price,
-        bytes8 paymentID,
         bytes32 encryptedMetadataHash
     );
     struct EncryptedAESwithECIES {

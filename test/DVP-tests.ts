@@ -1,5 +1,5 @@
-import { Register, DVP, PrimaryIssuance, Cash } from "../typechain-types";
-import { Signer } from "ethers";
+import { Register, DVP, DVPFactory, PrimaryIssuance, Cash } from "../typechain-types";
+import { Signer} from "ethers";
 import { ethers, network } from "hardhat";
 import { expect } from "chai";
 import { makeBondDate } from "../tests/dates";
@@ -105,15 +105,29 @@ describe("DVP tests", async () => {
     let hash = await register.atReturningHash(primaryIssuanceTest.getAddress());
     await register.enableContractToWhitelist(hash);
 
-    const DVPFactory = await ethers.getContractFactory("DVP");
-    let dvpTest = await DVPFactory.deploy(
+    const DVPFactory_ = await ethers.getContractFactory("DVP");
+    let dvpLogic = await DVPFactory_.deploy();
+    
+    const DVPFactoryFactory = await ethers.getContractFactory("DVPFactory");
+    
+    let dvpFactory:DVPFactory = await DVPFactoryFactory.deploy(
+      await dvpLogic.getAddress()
+    );
+
+
+    const tx  = await dvpFactory.createDVP(
       await register.getAddress(),
       await cak.getAddress(),
       await cak.getAddress(),
+      await cash.getAddress(),
       await cash.getAddress()
     );
 
-    hash = await register.atReturningHash(dvpTest.getAddress());
+    const txReceipt = await tx.wait(1)
+    console.log("DVP sc deployed to: "+txReceipt.logs[2].args[1])
+    let dvpTest: DVP = await txReceipt.logs[2].args[1]
+
+    hash = await register.atReturningHash(dvpTest);
     await register.enableContractToWhitelist(hash);
 
     // Initialize the primary issuance account
@@ -142,13 +156,30 @@ describe("DVP tests", async () => {
   });
 
   it("DVP", async () => {
-    const DVPFactory = await ethers.getContractFactory("DVP");
-    dvp = await DVPFactory.connect(bnd).deploy(
-      await register.getAddress(),
+    const DVPFactory_ = await ethers.getContractFactory("DVP");
+    let dvpLogic = await DVPFactory_.deploy();
+    
+    const DVPFactoryFactory = await ethers.getContractFactory("DVPFactory");
+    
+    let dvpFactory:DVPFactory= await DVPFactoryFactory.deploy(
+      await dvpLogic.getAddress()
+    );
+
+
+    const tx = await dvpFactory.connect(bnd).createDVP(
       await investorA.getAddress(),
       await bnd.getAddress(),
+      await register.getAddress(),
+      await cash.getAddress(),
       await cash.getAddress()
     );
+
+    const txReceipt = await tx.wait(1)
+    console.log("DVP sc deployed to: "+txReceipt.logs[2].args[1])
+    let dvpAddress = await txReceipt.logs[2].args[1]
+    const DVPContract = await ethers.getContractFactory("DVP");
+    let dvp:DVP = DVPContract.attach(dvpAddress)
+
     await cash.connect(centralBanker).transfer(investorA, 1000);
     const encryptedMetadata = "0x0000";
 
@@ -159,6 +190,7 @@ describe("DVP tests", async () => {
         quantity: 1000,
         price: 1,
         cashToken: await cash.getAddress(),
+        cashTokenExecutor: await cash.getAddress(),
         securityToken: await register.getAddress(),
         buyer: await investorA.getAddress(),
         seller: await bnd.getAddress(),

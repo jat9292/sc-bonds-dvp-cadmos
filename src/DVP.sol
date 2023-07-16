@@ -4,57 +4,48 @@
 pragma solidity 0.8.17;
 
 import "./intf/IBilateralTradeDVP.sol";
-import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "./Cash.sol";
 
-contract DVP is IBilateralTradeDVP, ReentrancyGuard {
+contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
     Status public status;
     address public settlementOperator;
     address secondApprover;
     TradeDetailDVP public details;
-    IRegister public register;
-    Cash cashToken;
 
     event RequestedCash(uint indexed requestedCash);
 
     /**
-     * @dev when the smart contract deploys :
-     * - we check that deployer has been whitelisted
-     * - we check that buyer has been whitelisted
-     * - we map the register contract to interact with it
-     * - variable settlementOperator gets msg.sender address
-     * - details struct buyer gets buyer address
-     * - status of current contract is Draft
-     * The constructor cannot be checked by the register by looking ain the hash of
-     * the runtime bytecode because this hash does not cover the constructor.
-     * so controls in the constructors are to be replicated in the first interaction with a function
+     * @dev As the smart contract is meant to be used behind a proxy we disable the initializer for the implemntation smart contract
      */
     constructor(
-        address _register,
-        address _buyer,
-        address _seller,
-        address _cashTokenAddress
     ) {
-        require(
-            IRegister(_register).investorsAllowed(msg.sender) ||
-                IRegister(_register).isBnD(msg.sender),
-            "Sender must be a valid investor"
-        );
+        _disableInitializers();
+    }
 
-        require(
-            IRegister(_register).investorsAllowed(_buyer),
-            "Buyer must be a valid investor"
-        );
 
-        settlementOperator = msg.sender;
+    /**
+     * @dev when the smart contract is initialized :
+     * - variable settlementOperator is set
+     * - details struct buyer gets buyer address
+     * - details struct seller gets seller address
+     * - we map the register contract to interact with it
+     * - we map the cashToken contract to interact with it
+     * - we map the cashTokenExecutor contract to interact with it
+     * - status of current contract is Draft
+     */
+    function initialize(address _settlementOperator, address _buyer, address _seller, address _register, address _cashTokenAddress, address _cashTokenExecutorAddress) public initializer{
+        settlementOperator = _settlementOperator;
         details.buyer = _buyer;
         details.seller = _seller;
         details.cashToken = _cashTokenAddress;
+        details.cashTokenExecutor = _cashTokenExecutorAddress;
         details.securityToken = _register;
         status = Status.Draft;
-        emit NotifyTradeDVP(msg.sender, _buyer, status, 0, 0, paymentID(), 0);
+        emit InitializedDVP(_settlementOperator, _buyer, _seller, _cashTokenAddress, _cashTokenExecutorAddress, _register, paymentID());
     }
+
 
     /**
      * @dev produces a unique payment identifier
@@ -78,7 +69,7 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
             keccak256(encryptedMetadata) == _details.encryptedMetadaHash,
             "Metadata doe not match committed hash"
         );
-        register = IRegister(details.securityToken);
+
         require(
             msg.sender == settlementOperator,
             "Only the settlementOperator can update this trade"
@@ -87,36 +78,28 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
             status == Status.Draft,
             "Cannot change the trade details unless in draft status"
         );
-        require(
-            register.investorsAllowed(_details.buyer),
-            "Buyer must be a valid investor even on changing details"
-        );
-        require(
-            register.investorsAllowed(_details.seller) ||
-                register.isBnD(_details.seller),
-            "Seller must be a valid investor even on changing details"
-        );
-
+        
         require(
             details.cashToken == _details.cashToken,
             "Cannot Change CashToken Address"
         );
         require(
-            address(register) == _details.securityToken,
+            details.cashTokenExecutor == _details.cashTokenExecutor,
+            "Cannot Change cashTokenExecutor Address"
+        );
+        require(
+            details.securityToken == _details.securityToken,
             "Cannot Change securityToken Address"
         );
 
-        cashToken = Cash(details.cashToken);
         details = _details;
-        bytes8 paymentID_ = paymentID();
         // an event needs to be generated to enable the back end to know that the trade has been changed
         emit NotifyTradeDVP(
-            _details.seller,
             _details.buyer,
+            _details.seller,
             status,
             _details.quantity,
             _details.price,
-            paymentID_,
             _details.encryptedMetadaHash
         );
         emit EncryptedMetaData(
@@ -140,6 +123,7 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
             _details.quantity == _detailscopy.quantity &&
             _details.price == _detailscopy.price &&
             _details.cashToken == _detailscopy.cashToken &&
+            _details.cashTokenExecutor == _detailscopy.cashTokenExecutor &&
             _details.securityToken == _detailscopy.securityToken &&
             _details.buyer == _detailscopy.buyer &&
             _details.seller == _detailscopy.seller &&
@@ -160,6 +144,11 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
         TradeDetailDVP calldata _detailscopy
     ) public nonReentrant returns (Status) {
         TradeDetailDVP memory _details = details;
+        Cash cashToken = Cash(_details.cashToken);
+        Cash cashTokenExecutor = Cash(_details.cashTokenExecutor);
+        IRegister securityToken = IRegister(_details.securityToken);
+        uint256 cashToTransfer = (_details.quantity *_details.price *(10 ** cashToken.decimals())) /(10 ** securityToken.decimals());
+
         if (
             (msg.sender == _details.seller || msg.sender == _details.buyer) &&
             status == Status.Draft
@@ -187,20 +176,15 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
 
             status = Status.Pending;
             emit NotifyTradeDVP(
-                _details.seller,
                 _details.buyer,
+                _details.seller,
                 status,
                 _details.quantity,
                 _details.price,
-                paymentID(),
                 _details.encryptedMetadaHash
             );
 
-            emit RequestedCash(
-                (_details.quantity *
-                    _details.price *
-                    (10 ** cashToken.decimals())) / (10 ** register.decimals())
-            );
+            emit RequestedCash(cashToTransfer);
             return (status);
         }
 
@@ -211,44 +195,53 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
             if (status == Status.Pending) {
                 status = Status.Accepted;
                 emit NotifyTradeDVP(
-                    _details.seller,
                     _details.buyer,
+                    _details.seller,
                     status,
                     _details.quantity,
                     _details.price,
-                    paymentID(),
                     _details.encryptedMetadaHash
                 );
             }
             if (msg.sender == settlementOperator) {
                 // If secondApprover is same as SettlementOperator, do directly the atomic swap
                 require(
-                    register.transferFrom(
+                    securityToken.transferFrom(
                         _details.seller,
                         _details.buyer,
                         _details.quantity
                     ),
                     "the bond transfer has failed"
                 );
-                require(
-                    cashToken.transferFrom(
-                        _details.buyer,
-                        _details.seller,
-                        (_details.quantity *
-                            _details.price *
-                            (10 ** cashToken.decimals())) /
-                            (10 ** register.decimals())
-                    ),
-                    "the cash transfer has failed"
-                );
+
+                if(details.cashTokenExecutor == details.cashToken){
+                    //If cashTokenExecutor is cashToken then directly call transferFrom on the token
+                    require(
+                        cashToken.transferFrom(
+                            _details.buyer,
+                            _details.seller,
+                            cashToTransfer
+                        ),
+                        "the cash transfer has failed"
+                    );
+                }
+                else{
+                    //Else we have to check that the transfer effectively took place
+                    uint256 startingSellerBalance = cashToken.balanceOf(_details.seller);
+                    cashTokenExecutor.transferFrom(
+                            _details.buyer,
+                            _details.seller,
+                            cashToTransfer
+                        );
+                    require(cashToken.balanceOf(_details.seller) == startingSellerBalance + cashToTransfer, "the cash transfer has failed");
+                }
                 status = Status.Executed;
                 emit NotifyTradeDVP(
-                    _details.seller,
                     _details.buyer,
+                    _details.seller,
                     status,
                     _details.quantity,
                     _details.price,
-                    paymentID(),
                     _details.encryptedMetadaHash
                 );
                 return (status);
@@ -257,7 +250,7 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
         }
 
         require(false, "the trade cannot be approved in this current status");
-        return (status);
+        return (status); //unreachable but needed to avoid compilation warning
     }
 
     /**
@@ -270,33 +263,31 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
     function reject() public {
         TradeDetailDVP memory _details = details;
         require(status != Status.Rejected, "Trade already rejected");
-        // seller can cancel the trade at any active state before the trade is executed
-        if (msg.sender == _details.seller && (status != Status.Executed)) {
+        // seller can cancel the trade when pending validation on his side or even after he has accepted the trade (but not when the settlementOperator prepares the trade (DRAFT))
+        if (msg.sender == _details.seller && (status == Status.Pending || status == Status.Accepted)) {
             status = Status.Rejected;
             emit NotifyTradeDVP(
-                _details.seller,
                 _details.buyer,
+                _details.seller,
                 status,
                 _details.quantity,
                 _details.price,
-                paymentID(),
                 _details.encryptedMetadaHash
             );
             return;
         }
-        // buyer can cancel the trade when pending validation on his side or even after he has accepted the trade (but not when the seller prepares the trade (DRAFT))
+        // buyer can cancel the trade when pending validation on his side or even after he has accepted the trade (but not when the settlementOperator prepares the trade (DRAFT))
         if (
             msg.sender == details.buyer &&
             (status == Status.Pending || status == Status.Accepted)
         ) {
             status = Status.Rejected;
             emit NotifyTradeDVP(
-                _details.seller,
                 _details.buyer,
+                _details.seller,
                 status,
                 _details.quantity,
                 _details.price,
-                paymentID(),
                 _details.encryptedMetadaHash
             );
             return;
@@ -304,12 +295,11 @@ contract DVP is IBilateralTradeDVP, ReentrancyGuard {
         if (msg.sender == settlementOperator && (status != Status.Executed)) {
             status = Status.Rejected;
             emit NotifyTradeDVP(
-                _details.seller,
                 _details.buyer,
+                _details.seller,
                 status,
                 _details.quantity,
                 _details.price,
-                paymentID(),
                 _details.encryptedMetadaHash
             );
             return;
