@@ -44,7 +44,6 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
      */
     function initialize(address _settlementOperator) public initializer {
         settlementOperator = _settlementOperator;
-        status = Status.Draft;
         emit InitializedDVP(_settlementOperator, paymentID());
     }
 
