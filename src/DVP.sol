@@ -8,6 +8,11 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "./Cash.sol";
 
+interface CashTokenExecutor {
+    function requestTransfer(address cashToken, address _buyer, address _seller, uint256 settlementAmount) external;
+}
+
+
 contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
     Status public status;
     address public settlementOperator;
@@ -145,7 +150,7 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
     ) public nonReentrant returns (Status) {
         TradeDetailDVP memory _details = details;
         Cash cashToken = Cash(_details.cashToken);
-        Cash cashTokenExecutor = Cash(_details.cashTokenExecutor);
+        CashTokenExecutor cashTokenExecutor = CashTokenExecutor(_details.cashTokenExecutor);
         IRegister securityToken = IRegister(_details.securityToken);
         uint256 cashToTransfer = (_details.quantity *_details.price *(10 ** cashToken.decimals())) /(10 ** securityToken.decimals());
 
@@ -228,7 +233,8 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
                 else{
                     //Else we have to check that the transfer effectively took place
                     uint256 startingSellerBalance = cashToken.balanceOf(_details.seller);
-                    cashTokenExecutor.transferFrom(
+                    cashTokenExecutor.requestTransfer(
+                            address(cashToken),
                             _details.buyer,
                             _details.seller,
                             cashToTransfer
