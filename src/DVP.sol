@@ -170,8 +170,8 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
             _details.cashTokenExecutor
         );
         IRegister securityToken = IRegister(_details.securityToken);
-        uint256 cashToTransfer = (_details.quantity *
-            _details.price / (10 ** securityToken.decimals()); // unity of price must be in cashToken decimals, eg 1 USD = 100 Gemini USD (2 decimals)
+        uint256 cashToTransfer = ((_details.quantity * _details.price) /
+            (10 ** securityToken.decimals())); // unity of price must be in cashToken decimals, eg 1 USD = 100 Gemini USD (2 decimals)
 
         if (
             (msg.sender == _details.seller || msg.sender == _details.buyer) &&
@@ -260,7 +260,7 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
                     );
                 } else {
                     //Else we have to check that the transfer effectively took place
-                    //cashTokenExecutor could be for example responsible of swapping EUR stablecoin  
+                    //cashTokenExecutor could be for example responsible of swapping EUR stablecoin
                     // from the buyer to a USD stable coin on a Curve pool
                     uint256 startingSellerBalance = cashToken.balanceOf(
                         _details.seller
