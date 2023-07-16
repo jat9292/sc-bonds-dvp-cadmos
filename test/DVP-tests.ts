@@ -123,8 +123,8 @@ describe("DVP tests", async () => {
     const tx = await dvpFactory.createDVP();
 
     const txReceipt = await tx.wait(1);
-    console.log("DVP sc deployed to: " + txReceipt.logs[2].args[1]);
-    let dvpTest: DVP = await txReceipt.logs[2].args[1];
+    console.log("DVP sc deployed to: " + txReceipt.logs[2].args[0]);
+    let dvpTest: DVP = await txReceipt.logs[2].args[0];
 
     hash = await register.atReturningHash(dvpTest);
     await register.enableContractToWhitelist(hash);
@@ -166,8 +166,8 @@ describe("DVP tests", async () => {
     const tx = await dvpFactory.connect(bnd).createDVP();
 
     const txReceipt = await tx.wait(1);
-    console.log("DVP sc deployed to: " + txReceipt.logs[2].args[1]);
-    let dvpAddress = await txReceipt.logs[2].args[1];
+    console.log("DVP sc deployed to: " + txReceipt.logs[2].args[0]);
+    let dvpAddress = await txReceipt.logs[2].args[0];
     const DVPContract = await ethers.getContractFactory("DVP");
     let dvp: DVP = DVPContract.attach(dvpAddress);
 
