@@ -1,5 +1,11 @@
-import { Register, DVP, DVPFactory, PrimaryIssuance, Cash } from "../typechain-types";
-import { Signer} from "ethers";
+import {
+  Register,
+  DVP,
+  DVPFactory,
+  PrimaryIssuance,
+  Cash,
+} from "../typechain-types";
+import { Signer } from "ethers";
 import { ethers, network } from "hardhat";
 import { expect } from "chai";
 import { makeBondDate } from "../tests/dates";
@@ -21,7 +27,7 @@ describe("DVP tests", async () => {
   let centralBanker: Signer;
   let addressOfPIA: string;
 
-  beforeEach(async () => {
+  before(async () => {
     accounts = await ethers.getSigners();
     cak = accounts[0];
     bnd = accounts[1];
@@ -107,20 +113,18 @@ describe("DVP tests", async () => {
 
     const DVPFactory_ = await ethers.getContractFactory("DVP");
     let dvpLogic = await DVPFactory_.deploy();
-    
+
     const DVPFactoryFactory = await ethers.getContractFactory("DVPFactory");
-    
-    let dvpFactory:DVPFactory = await DVPFactoryFactory.deploy(
+
+    let dvpFactory: DVPFactory = await DVPFactoryFactory.deploy(
       await dvpLogic.getAddress()
     );
 
+    const tx = await dvpFactory.createDVP();
 
-    const tx  = await dvpFactory.createDVP(
-    );
-
-    const txReceipt = await tx.wait(1)
-    console.log("DVP sc deployed to: "+txReceipt.logs[2].args[1])
-    let dvpTest: DVP = await txReceipt.logs[2].args[1]
+    const txReceipt = await tx.wait(1);
+    console.log("DVP sc deployed to: " + txReceipt.logs[2].args[1]);
+    let dvpTest: DVP = await txReceipt.logs[2].args[1];
 
     hash = await register.atReturningHash(dvpTest);
     await register.enableContractToWhitelist(hash);
@@ -145,7 +149,6 @@ describe("DVP tests", async () => {
     await primaryIssuance.connect(bnd).validate();
     const balanceOfPIA = await register.balanceOf(addressOfPIA);
     const balanceOfBnD = await register.balanceOf(await bnd.getAddress());
-    console.log(balanceOfPIA);
     expect(balanceOfPIA).to.be.equal("0");
     expect(balanceOfBnD).to.be.equal("1000");
   });
@@ -153,22 +156,20 @@ describe("DVP tests", async () => {
   it("DVP", async () => {
     const DVPFactory_ = await ethers.getContractFactory("DVP");
     let dvpLogic = await DVPFactory_.deploy();
-    
+
     const DVPFactoryFactory = await ethers.getContractFactory("DVPFactory");
-    
-    let dvpFactory:DVPFactory= await DVPFactoryFactory.deploy(
+
+    let dvpFactory: DVPFactory = await DVPFactoryFactory.deploy(
       await dvpLogic.getAddress()
     );
 
+    const tx = await dvpFactory.connect(bnd).createDVP();
 
-    const tx = await dvpFactory.connect(bnd).createDVP(
-    );
-
-    const txReceipt = await tx.wait(1)
-    console.log("DVP sc deployed to: "+txReceipt.logs[2].args[1])
-    let dvpAddress = await txReceipt.logs[2].args[1]
+    const txReceipt = await tx.wait(1);
+    console.log("DVP sc deployed to: " + txReceipt.logs[2].args[1]);
+    let dvpAddress = await txReceipt.logs[2].args[1];
     const DVPContract = await ethers.getContractFactory("DVP");
-    let dvp:DVP = DVPContract.attach(dvpAddress)
+    let dvp: DVP = DVPContract.attach(dvpAddress);
 
     await cash.connect(centralBanker).transfer(investorA, 1000);
     const encryptedMetadata = "0x0000";
