@@ -123,6 +123,7 @@ describe("DVP tests", async () => {
     const tx = await dvpFactory.createDVP();
 
     const txReceipt = await tx.wait(1);
+    console.log(txReceipt.logs);
     console.log("DVP sc deployed to: " + txReceipt.logs[2].args[0]);
     let dvpTest: DVP = await txReceipt.logs[2].args[0];
 

@@ -39,5 +39,5 @@ contract DVPFactory is Ownable, Pausable {
 
     /* ========== EVENTS ========== */
 
-    event DVPDeployed(address indexed settlementOperator);
+    event DVPDeployed(address DVPSmartContract);
 }
