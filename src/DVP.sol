@@ -114,6 +114,7 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
         emit NotifyTradeDVP(
             _details.buyer,
             _details.seller,
+            _details.encryptedMetadaHash,
             status,
             settlementOperator,
             _details.cashToken,
@@ -121,12 +122,11 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
             _details.securityToken,
             _details.quantity,
             _details.price,
-            _details.encryptedMetadaHash,
             paymentID()
         );
         emit EncryptedMetaData(
-            encryptedMetadata,
             _details.encryptedMetadaHash,
+            encryptedMetadata,
             encryptedSymmetricKeyForEachActor
         );
     }
@@ -204,6 +204,7 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
             emit NotifyTradeDVP(
                 _details.buyer,
                 _details.seller,
+                _details.encryptedMetadaHash,
                 status,
                 settlementOperator,
                 _details.cashToken,
@@ -211,7 +212,6 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
                 _details.securityToken,
                 _details.quantity,
                 _details.price,
-                _details.encryptedMetadaHash,
                 paymentID()
             );
 
@@ -228,6 +228,7 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
                 emit NotifyTradeDVP(
                     _details.buyer,
                     _details.seller,
+                    _details.encryptedMetadaHash,
                     status,
                     settlementOperator,
                     _details.cashToken,
@@ -235,7 +236,6 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
                     _details.securityToken,
                     _details.quantity,
                     _details.price,
-                    _details.encryptedMetadaHash,
                     paymentID()
                 );
             }
@@ -281,6 +281,7 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
                 emit NotifyTradeDVP(
                     _details.buyer,
                     _details.seller,
+                    _details.encryptedMetadaHash,
                     status,
                     settlementOperator,
                     _details.cashToken,
@@ -288,7 +289,6 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
                     _details.securityToken,
                     _details.quantity,
                     _details.price,
-                    _details.encryptedMetadaHash,
                     paymentID()
                 );
                 return (status);
@@ -319,6 +319,7 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
             emit NotifyTradeDVP(
                 _details.buyer,
                 _details.seller,
+                _details.encryptedMetadaHash,
                 status,
                 settlementOperator,
                 _details.cashToken,
@@ -326,7 +327,6 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
                 _details.securityToken,
                 _details.quantity,
                 _details.price,
-                _details.encryptedMetadaHash,
                 paymentID()
             );
             return;
@@ -340,6 +340,7 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
             emit NotifyTradeDVP(
                 _details.buyer,
                 _details.seller,
+                _details.encryptedMetadaHash,
                 status,
                 settlementOperator,
                 _details.cashToken,
@@ -347,7 +348,6 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
                 _details.securityToken,
                 _details.quantity,
                 _details.price,
-                _details.encryptedMetadaHash,
                 paymentID()
             );
             return;
@@ -357,6 +357,7 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
             emit NotifyTradeDVP(
                 _details.buyer,
                 _details.seller,
+                _details.encryptedMetadaHash,
                 status,
                 settlementOperator,
                 _details.cashToken,
@@ -364,7 +365,6 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
                 _details.securityToken,
                 _details.quantity,
                 _details.price,
-                _details.encryptedMetadaHash,
                 paymentID()
             );
             return;

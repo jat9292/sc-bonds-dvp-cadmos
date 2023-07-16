@@ -35,14 +35,14 @@ interface ITradeDVP {
     event NotifyTradeDVP(
         address indexed buyer,
         address indexed seller,
-        Status indexed status,
+        bytes32 indexed encryptedMetadataHash,
+        Status status,
         address settlementOperator,
         address cashToken,
         address cashTokenExecutor,
         address securityToken,
         uint256 quantity,
         uint256 price,
-        bytes32 encryptedMetadataHash,
         bytes8 paymentID
     );
     struct EncryptedAESwithECIES {
@@ -52,8 +52,8 @@ interface ITradeDVP {
         bytes mac;
     }
     event EncryptedMetaData(
+        bytes32 indexed encryptedMetadataHash,
         bytes encryptedMetadata,
-        bytes32 encryptedMetadataHash,
         EncryptedAESwithECIES[] encryptedSymmetricKeyForEachActor
     );
 }
