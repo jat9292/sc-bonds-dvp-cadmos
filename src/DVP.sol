@@ -40,15 +40,10 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
      * - we map the cashTokenExecutor contract to interact with it
      * - status of current contract is Draft
      */
-    function initialize(address _settlementOperator, address _buyer, address _seller, address _register, address _cashTokenAddress, address _cashTokenExecutorAddress) public initializer{
+    function initialize(address _settlementOperator) public initializer{
         settlementOperator = _settlementOperator;
-        details.buyer = _buyer;
-        details.seller = _seller;
-        details.cashToken = _cashTokenAddress;
-        details.cashTokenExecutor = _cashTokenExecutorAddress;
-        details.securityToken = _register;
         status = Status.Draft;
-        emit InitializedDVP(_settlementOperator, _buyer, _seller, _cashTokenAddress, _cashTokenExecutorAddress, _register, paymentID());
+        emit InitializedDVP(_settlementOperator, paymentID());
     }
 
 
@@ -63,7 +58,11 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
     /**
      * @dev enables the sellerAccount address to update the bilateral trade detail
      * can be called only if status of current contract is Draft
-     can be called only if buyer updated is whitelisted
+     * - details struct buyer gets buyer address - cannot be changed if already set
+     * - details struct seller gets seller address - cannot be changed if already set
+     * - we map the register contract to interact with it - cannot be changed if already set
+     * - we map the cashToken contract to interact with it - cannot be changed if already set
+     * - we map the cashTokenExecutor contract to interact with it - cannot be changed if already set
     */
     function setDetails(
         TradeDetailDVP calldata _details,
@@ -85,17 +84,26 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
         );
         
         require(
-            details.cashToken == _details.cashToken,
+            details.cashToken == _details.cashToken || details.cashToken == address(0),
             "Cannot Change CashToken Address"
         );
         require(
-            details.cashTokenExecutor == _details.cashTokenExecutor,
+            details.cashTokenExecutor == _details.cashTokenExecutor  || details.cashToken == address(0),
             "Cannot Change cashTokenExecutor Address"
         );
         require(
-            details.securityToken == _details.securityToken,
+            details.securityToken == _details.securityToken  || details.cashToken == address(0),
             "Cannot Change securityToken Address"
         );
+        require(
+            details.buyer == _details.buyer  || details.buyer == address(0),
+            "Cannot Change buyer Address"
+        );
+        require(
+            details.seller == _details.securityToken  || details.seller == address(0),
+            "Cannot Change seller Address"
+        );
+
 
         details = _details;
         // an event needs to be generated to enable the back end to know that the trade has been changed
@@ -103,9 +111,14 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
             _details.buyer,
             _details.seller,
             status,
+            settlementOperator,
+            _details.cashToken,
+            _details.cashTokenExecutor,
+            _details.securityToken,
             _details.quantity,
             _details.price,
-            _details.encryptedMetadaHash
+            _details.encryptedMetadaHash,
+            paymentID()
         );
         emit EncryptedMetaData(
             encryptedMetadata,
@@ -184,9 +197,14 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
                 _details.buyer,
                 _details.seller,
                 status,
+                settlementOperator,
+                _details.cashToken,
+                _details.cashTokenExecutor,
+                _details.securityToken,
                 _details.quantity,
                 _details.price,
-                _details.encryptedMetadaHash
+                _details.encryptedMetadaHash,
+                paymentID()
             );
 
             emit RequestedCash(cashToTransfer);
@@ -203,9 +221,14 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
                     _details.buyer,
                     _details.seller,
                     status,
+                    settlementOperator,
+                    _details.cashToken,
+                    _details.cashTokenExecutor,
+                    _details.securityToken,
                     _details.quantity,
                     _details.price,
-                    _details.encryptedMetadaHash
+                    _details.encryptedMetadaHash,
+                    paymentID()
                 );
             }
             if (msg.sender == settlementOperator) {
@@ -246,9 +269,14 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
                     _details.buyer,
                     _details.seller,
                     status,
+                    settlementOperator,
+                    _details.cashToken,
+                    _details.cashTokenExecutor,
+                    _details.securityToken,
                     _details.quantity,
                     _details.price,
-                    _details.encryptedMetadaHash
+                    _details.encryptedMetadaHash,
+                    paymentID()
                 );
                 return (status);
             }
@@ -276,9 +304,14 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
                 _details.buyer,
                 _details.seller,
                 status,
+                settlementOperator,
+                _details.cashToken,
+                _details.cashTokenExecutor,
+                _details.securityToken,
                 _details.quantity,
                 _details.price,
-                _details.encryptedMetadaHash
+                _details.encryptedMetadaHash,
+                paymentID()
             );
             return;
         }
@@ -292,9 +325,14 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
                 _details.buyer,
                 _details.seller,
                 status,
+                settlementOperator,
+                _details.cashToken,
+                _details.cashTokenExecutor,
+                _details.securityToken,
                 _details.quantity,
                 _details.price,
-                _details.encryptedMetadaHash
+                _details.encryptedMetadaHash,
+                paymentID()
             );
             return;
         }
@@ -304,9 +342,14 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
                 _details.buyer,
                 _details.seller,
                 status,
+                settlementOperator,
+                _details.cashToken,
+                _details.cashTokenExecutor,
+                _details.securityToken,
                 _details.quantity,
                 _details.price,
-                _details.encryptedMetadaHash
+                _details.encryptedMetadaHash,
+                paymentID()
             );
             return;
         }

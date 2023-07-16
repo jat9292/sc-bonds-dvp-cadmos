@@ -32,11 +32,6 @@ interface ITradeDVP {
 
     event InitializedDVP(
         address indexed settlementOperator,
-        address indexed buyer,
-        address indexed seller,
-        address cashToken,
-        address cashTokenExecutor,
-        address securityToken,
         bytes8  paymentID
     );
 
@@ -44,9 +39,14 @@ interface ITradeDVP {
         address indexed buyer,
         address indexed seller,
         Status indexed status,
+        address settlementOperator,
+        address cashToken,
+        address cashTokenExecutor,
+        address securityToken,
         uint256 quantity,
         uint256 price,
-        bytes32 encryptedMetadataHash
+        bytes32 encryptedMetadataHash,
+        bytes8  paymentID
     );
     struct EncryptedAESwithECIES {
         bytes iv;

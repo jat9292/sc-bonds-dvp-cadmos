@@ -116,11 +116,6 @@ describe("DVP tests", async () => {
 
 
     const tx  = await dvpFactory.createDVP(
-      await register.getAddress(),
-      await cak.getAddress(),
-      await cak.getAddress(),
-      await cash.getAddress(),
-      await cash.getAddress()
     );
 
     const txReceipt = await tx.wait(1)
@@ -167,11 +162,6 @@ describe("DVP tests", async () => {
 
 
     const tx = await dvpFactory.connect(bnd).createDVP(
-      await investorA.getAddress(),
-      await bnd.getAddress(),
-      await register.getAddress(),
-      await cash.getAddress(),
-      await cash.getAddress()
     );
 
     const txReceipt = await tx.wait(1)
