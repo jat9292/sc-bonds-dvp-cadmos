@@ -8,7 +8,7 @@ interface IBilateralTradeDVP is ITradeDVP {
     function setDetails(
         TradeDetailDVP calldata _details,
         bytes calldata encryptedMetadata,
-        EncryptedAESwithECIES[3] calldata encryptedSymmetricKeyForEachActor
+        EncryptedAESwithECIES[] calldata encryptedSymmetricKeyForEachActor
     ) external;
 
     function approve(
