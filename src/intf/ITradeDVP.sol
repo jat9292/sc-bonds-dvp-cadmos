@@ -42,7 +42,7 @@ interface ITradeDVP {
         address cashTokenExecutor,
         address securityToken,
         uint256 quantity,
-        uint256 price,
+        uint256 price, // unity of price must be in cashToken decimals, eg 1 USD = 100 Gemini USD (2 decimals)
         bytes8 paymentID
     );
     struct EncryptedAESwithECIES {
