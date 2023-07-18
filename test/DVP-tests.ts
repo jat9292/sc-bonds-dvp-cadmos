@@ -5,7 +5,7 @@ import {
   PrimaryIssuance,
   Cash,
 } from "../typechain-types";
-import { Signer } from "ethers";
+import { Signer, SigningKey } from "ethers";
 import { ethers, network } from "hardhat";
 import { expect } from "chai";
 import { makeBondDate } from "../tests/dates";
@@ -14,6 +14,9 @@ import {
   encryptWithPublicKey,
   decryptWithPrivateKeyAndAES,
 } from "../utils/sign";
+const { setBalance } = require("@nomicfoundation/hardhat-network-helpers");
+import dotenv from "dotenv";
+dotenv.config();
 
 describe("DVP tests", async () => {
   let register: Register;
@@ -24,24 +27,29 @@ describe("DVP tests", async () => {
   let cak: Signer;
   let bnd: Signer;
   let custodianA: Signer;
-  let custodianB: Signer;
   let investorA: Signer;
   let investorB: Signer;
-  let investorC: Signer;
-  let investorD: Signer;
   let centralBanker: Signer;
   let addressOfPIA: string;
+  let signingKeyBnd: SigningKey;
+  let signingKeyInvestorA: SigningKey;
+  let signingKeyInvestorB: SigningKey;
 
   before(async () => {
     accounts = await ethers.getSigners();
     cak = accounts[0];
-    bnd = accounts[1];
-    custodianA = accounts[2];
-    custodianB = accounts[3];
-    investorA = accounts[4];
-    investorB = accounts[5];
-    investorC = accounts[6];
-    investorD = accounts[7];
+    custodianA = accounts[1];
+    signingKeyBnd = new ethers.SigningKey("0x" + process.env.PRIVATE1!);
+    bnd = new ethers.Wallet(signingKeyBnd, ethers.provider);
+    signingKeyInvestorA = new ethers.SigningKey("0x" + process.env.PRIVATE2!);
+    investorA = new ethers.Wallet(signingKeyInvestorA, ethers.provider);
+    signingKeyInvestorB = new ethers.SigningKey("0x" + process.env.PRIVATE3!);
+    investorB = new ethers.Wallet(signingKeyInvestorB, ethers.provider);
+
+    await setBalance(await bnd.getAddress(), 100n ** 18n); // set initial balances to 100 ETH
+    await setBalance(await investorA.getAddress(), 100n ** 18n); // set initial balances to 100 ETH
+    await setBalance(await investorB.getAddress(), 100n ** 18n); // set initial balances to 100 ETH
+
     centralBanker = accounts[8];
     const dates = makeBondDate(5, 1309402208 - 1309302208);
     const bondName = "EIB 3Y 1Bn SEK";
@@ -52,7 +60,7 @@ describe("DVP tests", async () => {
     const couponRate = 0.4 * 100 * 10000;
 
     console.log("Deploying register");
-    let RegisterFactory = await ethers.getContractFactory("Register");
+    const RegisterFactory = await ethers.getContractFactory("Register");
 
     register = await RegisterFactory.deploy(
       bondName,
@@ -75,8 +83,6 @@ describe("DVP tests", async () => {
 
     await register.grantCstRole(await custodianA.getAddress());
 
-    await register.grantCstRole(await custodianB.getAddress());
-
     await register
       .connect(custodianA)
       .enableInvestorToWhitelist(await cak.getAddress()); // needed to deploy a test trade contract
@@ -89,14 +95,6 @@ describe("DVP tests", async () => {
       .connect(custodianA)
       .enableInvestorToWhitelist(await investorB.getAddress());
 
-    await register
-      .connect(custodianA)
-      .enableInvestorToWhitelist(await investorC.getAddress());
-
-    await register
-      .connect(custodianA)
-      .enableInvestorToWhitelist(await investorD.getAddress());
-
     console.log("Deploying cash");
     const cashFactory = await ethers.getContractFactory("Cash");
     cash = await cashFactory.connect(centralBanker).deploy();
@@ -108,12 +106,14 @@ describe("DVP tests", async () => {
       "PrimaryIssuance"
     );
 
-    let primaryIssuanceTest = await primaryIssuanceFactory.deploy(
+    const primaryIssuanceTest = await primaryIssuanceFactory.deploy(
       await register.getAddress(),
       1500
     );
 
-    let hash = await register.atReturningHash(primaryIssuanceTest.getAddress());
+    const hash = await register.atReturningHash(
+      primaryIssuanceTest.getAddress()
+    );
     await register.enableContractToWhitelist(hash);
 
     const DVPLogicFactory = await ethers.getContractFactory("DVP");
@@ -121,18 +121,18 @@ describe("DVP tests", async () => {
 
     const DVPFactoryFactory = await ethers.getContractFactory("DVPFactory");
 
-    let dvpFactory: DVPFactory = await DVPFactoryFactory.deploy(
+    const dvpFactory: DVPFactory = await DVPFactoryFactory.deploy(
       await dvpLogic.getAddress()
     );
 
     const tx = await dvpFactory.createDVP();
 
     const txReceipt = await tx.wait(1);
-    console.log("DVP sc deployed to: " + txReceipt.logs[2].args[0]);
-    let dvpTest: DVP = await txReceipt.logs[2].args[0];
+    console.log("Test DVP sc deployed to: " + txReceipt.logs[2].args[0]);
+    const dvpTest: DVP = await txReceipt.logs[2].args[0];
 
-    hash = await register.atReturningHash(dvpTest);
-    await register.enableContractToWhitelist(hash);
+    const hash2 = await register.atReturningHash(dvpTest);
+    await register.enableContractToWhitelist(hash2);
 
     // Initialize the primary issuance account
     await register.setExpectedSupply(1000);
@@ -160,7 +160,7 @@ describe("DVP tests", async () => {
 
   it("DVP from BND to Investor in same currency unit (no cashTokenExecutor)", async () => {
     const DVPLogicFactory = await ethers.getContractFactory("DVP");
-    let dvpLogic = await DVPLogicFactory.deploy();
+    const dvpLogic = await DVPLogicFactory.deploy();
 
     const DVPFactoryFactory = await ethers.getContractFactory("DVPFactory");
 
@@ -172,7 +172,7 @@ describe("DVP tests", async () => {
 
     const txReceipt = await tx.wait(1);
     console.log("DVP sc deployed to: " + txReceipt.logs[2].args[0]);
-    let dvpAddress = await txReceipt.logs[2].args[0];
+    const dvpAddress = await txReceipt.logs[2].args[0];
     const DVPContract = await ethers.getContractFactory("DVP");
     dvp = DVPContract.attach(dvpAddress);
 
@@ -190,25 +190,21 @@ describe("DVP tests", async () => {
     20 - MT202
     21 - MT202`;
 
-    const encryptedMetadata = encryptSymmetricAES(metadata, true); // compression set to true: saves around 30% of bytes emitted in the EncryptedMetaData event, saving gas
+    // The first seller (the Bnd) generates a random AES key and encrypts the metadata :
+    let [encryptedMetadata, AESKey, iv] = encryptSymmetricAES(metadata, true); // compression set to true: saves around 30% of bytes emitted in the EncryptedMetaData event, saving gas
 
-    const wallet1 = ethers.fromMnemonic(accounts.mnemonic, accounts.path + `/1`);
-
-const privateKey1 = wallet1.privateKey
-    const privateKeySeller = bnd.; //BND is the seller
-    const publicKeySeller = ;
-
-    let encECIES = await encryptWithPublicKey(
+    const encECIES_seller = await encryptWithPublicKey(
       AESKey.toString("hex") + "IV" + iv.toString("hex"),
-      publicKeySeller
+      signingKeyBnd.publicKey
     ); // encrypts AES with ECIES
-    let [isValid, decryptedMessage] = await decryptWithPrivateKeyAndAES(
-      encryptedMessage,
-      encECIES,
-      privateKeySeller,
-      COMPRESSION
-    );
 
+    let [isValid, decryptedMessage] = await decryptWithPrivateKeyAndAES(
+      encryptedMetadata,
+      encECIES_seller,
+      signingKeyBnd.privateKey,
+      true
+    );
+    /*
     await dvp.connect(bnd).setDetails(
       {
         encryptedMetadaHash:
@@ -229,6 +225,6 @@ const privateKey1 = wallet1.privateKey
         { iv: "0x00", ephemPublicKey: "0x00", ciphertext: "0x00", mac: "0x00" },
         { iv: "0x00", ephemPublicKey: "0x00", ciphertext: "0x00", mac: "0x00" },
       ]
-    );
+    );*/
   });
 });

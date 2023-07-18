@@ -90,12 +90,12 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
         );
         require(
             details.cashTokenExecutor == _details.cashTokenExecutor ||
-                details.cashToken == address(0),
+                details.cashTokenExecutor == address(0),
             "Cannot Change cashTokenExecutor Address"
         );
         require(
             details.securityToken == _details.securityToken ||
-                details.cashToken == address(0),
+                details.securityToken == address(0),
             "Cannot Change securityToken Address"
         );
         require(
