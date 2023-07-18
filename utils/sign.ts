@@ -109,6 +109,7 @@ async function main() {
   const privateKeySeller =
     "a68876f6f16efcc9a23b2b14b1783392a47197fe0a8bf5802675f1722165b7ea";
   const publicKeySeller = EthCrypto.publicKeyByPrivateKey(privateKeySeller);
+  console.log(publicKeySeller);
   let encECIES = await encryptWithPublicKey(
     AESKey.toString("hex") + "IV" + iv.toString("hex"),
     publicKeySeller
@@ -119,6 +120,8 @@ async function main() {
     privateKeySeller,
     COMPRESSION
   );
+  console.log("PRIVATE KEY ", privateKeySeller);
+  console.log(decryptedMessage);
 }
 main();
 

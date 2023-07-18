@@ -18,6 +18,43 @@ const { setBalance } = require("@nomicfoundation/hardhat-network-helpers");
 import dotenv from "dotenv";
 dotenv.config();
 
+// defining utils functions before the tests
+interface Encrypted {
+  iv: string;
+  ephemPublicKey: string;
+  ciphertext: string;
+  mac: string;
+}
+function add0x(encryptedAES_: Encrypted): Encrypted {
+  return {
+    iv: "0x" + encryptedAES_.iv,
+    ephemPublicKey: "0x" + encryptedAES_.ephemPublicKey,
+    ciphertext: "0x" + encryptedAES_.ciphertext,
+    mac: "0x" + encryptedAES_.mac,
+  };
+}
+function remove0x(encryptedAES_: Encrypted): Encrypted {
+  return {
+    iv:
+      encryptedAES_.iv.slice(0, 2) == "0x"
+        ? encryptedAES_.iv.slice(2)
+        : encryptedAES_.iv,
+    ephemPublicKey:
+      encryptedAES_.ephemPublicKey.slice(0, 2) == "0x"
+        ? encryptedAES_.ephemPublicKey.slice(2)
+        : encryptedAES_.ephemPublicKey,
+    ciphertext:
+      encryptedAES_.ciphertext.slice(0, 2) == "0x"
+        ? "0x" + encryptedAES_.ciphertext.slice(2)
+        : encryptedAES_.ciphertext,
+    mac:
+      encryptedAES_.mac.slice(0, 2) == "0x"
+        ? "0x" + encryptedAES_.mac.slice(2)
+        : encryptedAES_.mac,
+  };
+}
+
+// tests begin here
 describe("DVP tests", async () => {
   let register: Register;
   let dvp: DVP;
@@ -46,9 +83,9 @@ describe("DVP tests", async () => {
     signingKeyInvestorB = new ethers.SigningKey("0x" + process.env.PRIVATE3!);
     investorB = new ethers.Wallet(signingKeyInvestorB, ethers.provider);
 
-    await setBalance(await bnd.getAddress(), 100n ** 18n); // set initial balances to 100 ETH
-    await setBalance(await investorA.getAddress(), 100n ** 18n); // set initial balances to 100 ETH
-    await setBalance(await investorB.getAddress(), 100n ** 18n); // set initial balances to 100 ETH
+    await setBalance(await bnd.getAddress(), 100n * 10n ** 18n); // set initial balances to 100 ETH
+    await setBalance(await investorA.getAddress(), 100n * 10n ** 18n); // set initial balances to 100 ETH
+    await setBalance(await investorB.getAddress(), 100n * 10n ** 18n); // set initial balances to 100 ETH
 
     centralBanker = accounts[8];
     const dates = makeBondDate(5, 1309402208 - 1309302208);
@@ -195,22 +232,20 @@ describe("DVP tests", async () => {
 
     const encECIES_seller = await encryptWithPublicKey(
       AESKey.toString("hex") + "IV" + iv.toString("hex"),
-      signingKeyBnd.publicKey
-    ); // encrypts AES with ECIES
+      signingKeyBnd.publicKey.slice(4) // we need to slice the first 4 characters because according to section 2.2 of RFC 5480, the first byte, "0x04" indicates that this is an uncompressed key, and EthCrypto does not follow this convention, contrarily to ethersjs
+    ); // encrypts AES key with public key of seller using ECIES
 
-    let [isValid, decryptedMessage] = await decryptWithPrivateKeyAndAES(
-      encryptedMetadata,
-      encECIES_seller,
-      signingKeyBnd.privateKey,
-      true
-    );
-    /*
-    await dvp.connect(bnd).setDetails(
+    const encECIES_buyer = await encryptWithPublicKey(
+      AESKey.toString("hex") + "IV" + iv.toString("hex"),
+      signingKeyInvestorA.publicKey.slice(4)
+    ); // encrypts AES key with public key of buyer using ECIES
+
+    // the Bnd (seller) set the details of the trade
+    const tx2 = await dvp.connect(bnd).setDetails(
       {
-        encryptedMetadaHash:
-          "0xbc36789e7a1e281436464229828f817d6612f7b477d66591ff96a9e064bcc98a",
+        encryptedMetadaHash: ethers.keccak256(encryptedMetadata),
         quantity: 1000,
-        price: 1 * 10 ** 18,
+        price: 10n ** 18n,
         cashToken: await cash.getAddress(),
         cashTokenExecutor: "0x0000000000000000000000000000000000000000", // no need for a cash executor
         securityToken: await register.getAddress(),
@@ -219,12 +254,28 @@ describe("DVP tests", async () => {
         tradeDate: 123,
         valueDate: 234,
       },
-      "0x00",
-      [
-        { iv: "0x00", ephemPublicKey: "0x00", ciphertext: "0x00", mac: "0x00" },
-        { iv: "0x00", ephemPublicKey: "0x00", ciphertext: "0x00", mac: "0x00" },
-        { iv: "0x00", ephemPublicKey: "0x00", ciphertext: "0x00", mac: "0x00" },
-      ]
-    );*/
+      encryptedMetadata,
+      [add0x(encECIES_seller), add0x(encECIES_buyer)]
+    );
+    const txReceipt2 = await tx2.wait(1); // the EncryptedMetaData event which is listened to by buyer and seller
+    const encryptedMetadataLog = await txReceipt2.logs[1].args[1]; // the encrypted metadata extracted from the EncryptedMetaData event
+    const EncryptedAESwithECIESArray = await txReceipt2.logs[1].args[2]; // array of encrypted AES key, one for each actor of the trade
+
+    // the buyer verifies that at least one of the EncryptedAES keys can be decrypted to an AES key which can, in turn, be used to decrypt a valid message from the encrypted metadata
+    for (let i = 0; i < EncryptedAESwithECIESArray.length; i++) {
+      console.log(encryptedMetadataLog.slice(2));
+      console.log("PRIVATE KEY ", signingKeyBnd.privateKey);
+      try {
+        let [isValid, decryptedMessage] = await decryptWithPrivateKeyAndAES(
+          encryptedMetadataLog.slice(2),
+          remove0x(EncryptedAESwithECIESArray[i]),
+          signingKeyBnd.privateKey.slice(2),
+          true
+        );
+        console.log(isValid);
+      } catch (error) {
+        console.log(error.message);
+      }
+    }
   });
 });
