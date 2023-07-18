@@ -2,22 +2,9 @@ import crypto from "crypto";
 import EthCrypto from "eth-crypto";
 import pako from "pako";
 
-const COMPRESSION = true;
-
-// Define the message which MUST starts with the bytestring corresponding to keccak256("VALID MESSAGE") to let the different actors check the encrypted Metadata before approving the DVP
-let message = `704512f53a4efc15864acc3cf3e4e319cf66d48723acf6bd676c1ae7919a05dc
-Buyer - Name - Physical Address - LEI
-Seller -  Name - Physical  Address - LEI
-Asset - Asset Ethereum Address + chainID
-Cash - Ethereum Cash Address + chainID
-Quantity 
-Price
-Time
-20 - MT202
-21 - MT202`;
-
 const metadataCheck =
-  "704512f53a4efc15864acc3cf3e4e319cf66d48723acf6bd676c1ae7919a05dc"; // keccak256("VALID MESSAGE")
+  "704512f53a4efc15864acc3cf3e4e319cf66d48723acf6bd676c1ae7919a05dc"; // keccak256("VALID MESSAGE") for integrity check
+// NOTE : alternatively, this check value could be replaced by bytes32(0) to save gas, especially when using compression
 
 function encryptSymmetricAES(
   message_: string,
@@ -35,7 +22,10 @@ function encryptSymmetricAES(
     let compressed = pako.deflate(input);
     encrypted = Buffer.concat([cipher.update(compressed), cipher.final()]);
   } else {
-    encrypted = Buffer.concat([cipher.update(message, "utf8"), cipher.final()]);
+    encrypted = Buffer.concat([
+      cipher.update(message_, "utf8"),
+      cipher.final(),
+    ]);
   }
   return [encrypted, AESKey, iv];
 }
@@ -99,31 +89,6 @@ async function decryptWithPrivateKeyAndAES(
   }
   return [isValid, decrypted_msg];
 }
-
-async function main() {
-  //example of hybrid encryption scheme (symmetric+asymmetric)
-  let [encryptedMessage, AESKey, iv] = encryptSymmetricAES(
-    message,
-    COMPRESSION
-  ); // Get an encrypted message with a randomly generated AES key
-  const privateKeySeller =
-    "a68876f6f16efcc9a23b2b14b1783392a47197fe0a8bf5802675f1722165b7ea";
-  const publicKeySeller = EthCrypto.publicKeyByPrivateKey(privateKeySeller);
-  console.log(publicKeySeller);
-  let encECIES = await encryptWithPublicKey(
-    AESKey.toString("hex") + "IV" + iv.toString("hex"),
-    publicKeySeller
-  ); // encrypts AES with ECIES
-  let [isValid, decryptedMessage] = await decryptWithPrivateKeyAndAES(
-    encryptedMessage,
-    encECIES,
-    privateKeySeller,
-    COMPRESSION
-  );
-  console.log("PRIVATE KEY ", privateKeySeller);
-  console.log(decryptedMessage);
-}
-main();
 
 export {
   encryptSymmetricAES,

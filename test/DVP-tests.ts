@@ -45,17 +45,17 @@ function remove0x(encryptedAES_: Encrypted): Encrypted {
         : encryptedAES_.ephemPublicKey,
     ciphertext:
       encryptedAES_.ciphertext.slice(0, 2) == "0x"
-        ? "0x" + encryptedAES_.ciphertext.slice(2)
+        ? encryptedAES_.ciphertext.slice(2)
         : encryptedAES_.ciphertext,
     mac:
       encryptedAES_.mac.slice(0, 2) == "0x"
-        ? "0x" + encryptedAES_.mac.slice(2)
+        ? encryptedAES_.mac.slice(2)
         : encryptedAES_.mac,
   };
 }
 
 // tests begin here
-describe("DVP tests", async () => {
+describe("Simple Atomic DVP test", async () => {
   let register: Register;
   let dvp: DVP;
   let dvpLogic: DVP;
@@ -182,7 +182,9 @@ describe("DVP tests", async () => {
 
   it("Primary issuance", async () => {
     const balanceOfPIABefore = await register.balanceOf(addressOfPIA);
-    expect(balanceOfPIABefore).to.be.equal("1000");
+    const balanceOfBnDBefore = await register.balanceOf(bnd.getAddress());
+    expect(balanceOfPIABefore).to.be.equal(1000);
+    expect(balanceOfBnDBefore).to.be.equal(0);
     const primaryIssuanceFactory = await ethers.getContractFactory(
       "PrimaryIssuance"
     );
@@ -192,8 +194,8 @@ describe("DVP tests", async () => {
     await primaryIssuance.connect(bnd).validate();
     const balanceOfPIA = await register.balanceOf(addressOfPIA);
     const balanceOfBnD = await register.balanceOf(bnd.getAddress());
-    expect(balanceOfPIA).to.be.equal("0");
-    expect(balanceOfBnD).to.be.equal("1000");
+    expect(balanceOfPIA).to.be.equal(0);
+    expect(balanceOfBnD).to.be.equal(1000);
   });
 
   it("DVP from BND to Investor in same currency unit (no cashTokenExecutor)", async () => {
@@ -232,6 +234,8 @@ describe("DVP tests", async () => {
       AESKey.toString("hex") + "IV" + iv.toString("hex"),
       signingKeyBnd.publicKey.slice(4) // we need to slice the first 4 characters because according to section 2.2 of RFC 5480, the first byte, "0x04" indicates that this is an uncompressed key, and EthCrypto does not follow this convention, contrarily to ethersjs
     ); // encrypts AES key with public key of seller using ECIES
+    // NOTE : public key can be deducted from the address of an EOA if the EOA has already initiated any transaction, see : https://ethereum.stackexchange.com/a/13892
+    // NOTE : if the no transaction was ever sent from the address, an alternative could be tu use a Public Key Infrastructure
 
     const encECIES_buyer = await encryptWithPublicKey(
       AESKey.toString("hex") + "IV" + iv.toString("hex"),
@@ -242,7 +246,7 @@ describe("DVP tests", async () => {
     const tx2 = await dvp.connect(bnd).setDetails(
       {
         encryptedMetadaHash: ethers.keccak256(encryptedMetadata),
-        quantity: 1000,
+        quantity: 1000n,
         price: 10n ** 18n,
         cashToken: cash.getAddress(),
         cashTokenExecutor: "0x0000000000000000000000000000000000000000", // no need for a cash executor
@@ -253,6 +257,7 @@ describe("DVP tests", async () => {
         valueDate: 234,
       },
       encryptedMetadata,
+      //"0x" + encryptedMetadata.toString("hex"),
       [add0x(encECIES_seller), add0x(encECIES_buyer)]
     );
     const txReceipt2 = await tx2.wait(1); // the EncryptedMetaData event which is listened to by buyer and seller
@@ -263,20 +268,33 @@ describe("DVP tests", async () => {
     // to an AES key which can, in turn, be used to decrypt a valid message from the encrypted metadata
     // NOTE : the validity check is not sufficient by itself, in practise the buyer should then read the
     // decrypted message to ensure that he agrees on the terms before doing the approve transaction
+    let isValidOnce = false;
+    let validMessage: string;
     for (let i = 0; i < EncryptedAESwithECIESArray.length; i++) {
       try {
         let [isValid, decryptedMessage] = await decryptWithPrivateKeyAndAES(
-          encryptedMetadataLog.slice(2),
+          Buffer.from(encryptedMetadataLog.slice(2), "hex"),
           remove0x(EncryptedAESwithECIESArray[i]),
           signingKeyInvestorA.privateKey.slice(2),
           true
         );
-        console.log(isValid);
-      } catch (error) {
-        console.log(error.message);
-      }
+        if (isValid) {
+          isValidOnce = true;
+          validMessage = decryptedMessage;
+        }
+      } catch {}
     }
 
+    if (isValidOnce) {
+      console.log(
+        "Integrity check : the buyer was succesfully able to decrypt the metadata!"
+      );
+      console.log("------- Decrypted Message -------");
+      console.log(validMessage);
+    }
+
+    expect(isValidOnce).to.be.true; // buyer should be able to validate the encrypted metadata
+    console.log("DECIMALS ", await register.decimals());
     // if previous check convinced the buyer that metadata is valid and he agrees on the terms,
     // he approves the dvp to spend the needed amount of cashToken and then calls approve on dvp
     await cash.connect(investorA).approve(dvp.getAddress(), 1000n * 10n ** 18n);
@@ -292,27 +310,28 @@ describe("DVP tests", async () => {
       tradeDate: 123,
       valueDate: 234,
     });
-
-    // the seller (Bnd) could also checks that at least one of the EncryptedAES keys lead to a valid decrypted
+    console.log("------- Setup of DVP is done -------");
+    // the seller (Bnd) could also check that at least one of the EncryptedAES keys lead to a valid decrypted
     // metadata but this check in this special case is optional, because he is also the settlement operator
     // so in this case the bnd can approve directly and, because he is the setllement operator,
     // dvp will be executed in the same approve transaction
 
     console.log(
-      "Cash of investorA before DVP : ",
-      await cash.balanceOf(investorA.getAddress())
+      "Cash of Buyer before DVP : \x1b[93;1m",
+      Number((await cash.balanceOf(investorA.getAddress())) / 10n ** 18n) +
+        "$\x1b[0m"
     );
     console.log(
-      "Cash of Bnd before DVP : ",
-      await cash.balanceOf(bnd.getAddress())
+      "Cash of Seller before DVP : \x1b[93;1m",
+      Number((await cash.balanceOf(bnd.getAddress())) / 10n ** 18n) + "$\x1b[0m"
     );
     console.log(
-      "Security token amount of investorA before DVP : ",
-      await register.balanceOf(investorA.getAddress())
+      "Security token quantity of investorA before DVP : \x1b[93;1m",
+      (await register.balanceOf(investorA.getAddress())) + "\x1b[0m"
     );
     console.log(
-      "Security token amount of Bnd before DVP : ",
-      await register.balanceOf(bnd.getAddress())
+      "Security token quantity of Bnd before DVP : \x1b[93;1m",
+      (await register.balanceOf(bnd.getAddress())).toString() + "\x1b[0m"
     );
     console.log("-------- Executing DVP --------");
     await dvp.connect(bnd).approve({
@@ -327,22 +346,26 @@ describe("DVP tests", async () => {
       tradeDate: 123,
       valueDate: 234,
     });
-
     console.log(
-      "Cash of investorA after DVP : ",
-      await cash.balanceOf(investorA.getAddress())
+      "The settlement operator - who is also the seller - executes the DVP, after approval of the buyer"
     );
     console.log(
-      "Cash of Bnd after DVP : ",
-      await cash.balanceOf(bnd.getAddress())
+      "Cash of Buyer after DVP :  \x1b[93;1m",
+      Number((await cash.balanceOf(investorA.getAddress())) / 10n ** 18n) +
+        "$\x1b[0m"
     );
     console.log(
-      "Security token amount of investorA after DVP : ",
-      await register.balanceOf(investorA.getAddress())
+      "Cash of Seller after DVP :  \x1b[93;1m",
+      Number((await cash.balanceOf(bnd.getAddress())) / 10n ** 18n).toString() +
+        "$\x1b[0m"
     );
     console.log(
-      "Security token amount of Bnd after DVP : ",
-      await register.balanceOf(bnd.getAddress())
+      "Security token quantity of Buyer after DVP :  \x1b[93;1m",
+      (await register.balanceOf(investorA.getAddress())).toString() + "\x1b[0m"
+    );
+    console.log(
+      "Security token quantity of Seller after DVP : \x1b[93;1m",
+      (await register.balanceOf(bnd.getAddress())).toString()
     );
   });
 });
