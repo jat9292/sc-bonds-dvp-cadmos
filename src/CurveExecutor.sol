@@ -47,6 +47,7 @@ contract CurveExecutor is Ownable{
 
     function requestTransfer(
         address cashToken,
+        address securityToken,
         address _buyer,
         address _seller,
         uint256 settlementAmount
