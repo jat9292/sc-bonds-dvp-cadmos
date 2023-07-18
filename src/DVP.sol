@@ -11,6 +11,7 @@ import "./Cash.sol";
 interface CashTokenExecutor {
     function requestTransfer(
         address cashToken,
+        address securityToken,
         address _buyer,
         address _seller,
         uint256 settlementAmount
@@ -267,6 +268,7 @@ contract DVP is IBilateralTradeDVP, Initializable, ReentrancyGuard {
                     );
                     cashTokenExecutor.requestTransfer(
                         address(cashToken),
+                        address(securityToken),
                         _details.buyer,
                         _details.seller,
                         cashToTransfer

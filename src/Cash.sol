@@ -8,7 +8,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract Cash is ERC20, Ownable {
     constructor() ERC20("TEST USD", "TUSD") {
-        _mint(msg.sender, 10000 * 10 ** 18);
+        _mint(msg.sender, 1000000000 * 10 ** 18);
     }
 
     function burn(address to, uint256 amount) public onlyOwner {
