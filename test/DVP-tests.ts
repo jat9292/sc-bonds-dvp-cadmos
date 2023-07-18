@@ -9,6 +9,11 @@ import { Signer } from "ethers";
 import { ethers, network } from "hardhat";
 import { expect } from "chai";
 import { makeBondDate } from "../tests/dates";
+import {
+  encryptSymmetricAES,
+  encryptWithPublicKey,
+  decryptWithPrivateKeyAndAES,
+} from "../utils/sign";
 
 describe("DVP tests", async () => {
   let register: Register;
@@ -153,7 +158,7 @@ describe("DVP tests", async () => {
     expect(balanceOfBnD).to.be.equal("1000");
   });
 
-  it("DVP", async () => {
+  it("DVP from BND to Investor in same currency unit (no cashTokenExecutor)", async () => {
     const DVPLogicFactory = await ethers.getContractFactory("DVP");
     let dvpLogic = await DVPLogicFactory.deploy();
 
@@ -163,25 +168,55 @@ describe("DVP tests", async () => {
       await dvpLogic.getAddress()
     );
 
-    const tx = await dvpFactory.connect(bnd).createDVP();
+    const tx = await dvpFactory.connect(bnd).createDVP(); // the BND is the setllement operator
 
     const txReceipt = await tx.wait(1);
     console.log("DVP sc deployed to: " + txReceipt.logs[2].args[0]);
     let dvpAddress = await txReceipt.logs[2].args[0];
     const DVPContract = await ethers.getContractFactory("DVP");
-    let dvp: DVP = DVPContract.attach(dvpAddress);
+    dvp = DVPContract.attach(dvpAddress);
 
     await cash.connect(centralBanker).transfer(investorA, 1000);
-    const encryptedMetadata = "0x0000";
+
+    // metadata MUST starts with the bytestring corresponding to keccak256("VALID MESSAGE") to let the different actors check the encrypted Metadata before approving the DVP
+    const metadata = `704512f53a4efc15864acc3cf3e4e319cf66d48723acf6bd676c1ae7919a05dc
+    Buyer - Name - Physical Address - LEI
+    Seller -  Name - Physical  Address - LEI
+    Asset - Asset Ethereum Address + chainID
+    Cash - Ethereum Cash Address + chainID
+    Quantity 
+    Price
+    Time
+    20 - MT202
+    21 - MT202`;
+
+    const encryptedMetadata = encryptSymmetricAES(metadata, true); // compression set to true: saves around 30% of bytes emitted in the EncryptedMetaData event, saving gas
+
+    const wallet1 = ethers.fromMnemonic(accounts.mnemonic, accounts.path + `/1`);
+
+const privateKey1 = wallet1.privateKey
+    const privateKeySeller = bnd.; //BND is the seller
+    const publicKeySeller = ;
+
+    let encECIES = await encryptWithPublicKey(
+      AESKey.toString("hex") + "IV" + iv.toString("hex"),
+      publicKeySeller
+    ); // encrypts AES with ECIES
+    let [isValid, decryptedMessage] = await decryptWithPrivateKeyAndAES(
+      encryptedMessage,
+      encECIES,
+      privateKeySeller,
+      COMPRESSION
+    );
 
     await dvp.connect(bnd).setDetails(
       {
         encryptedMetadaHash:
           "0xbc36789e7a1e281436464229828f817d6612f7b477d66591ff96a9e064bcc98a",
         quantity: 1000,
-        price: 1,
+        price: 1 * 10 ** 18,
         cashToken: await cash.getAddress(),
-        cashTokenExecutor: await cash.getAddress(),
+        cashTokenExecutor: "0x0000000000000000000000000000000000000000", // no need for a cash executor
         securityToken: await register.getAddress(),
         buyer: await investorA.getAddress(),
         seller: await bnd.getAddress(),
