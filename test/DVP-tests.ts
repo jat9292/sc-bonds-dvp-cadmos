@@ -4,6 +4,10 @@ import {
   DVPFactory,
   PrimaryIssuance,
   Cash,
+  CashTokenExecutor,
+  FakeCurvePool
+
+
 } from "../typechain-types";
 import { Signer, SigningKey } from "ethers";
 import { ethers, network } from "hardhat";
@@ -16,13 +20,17 @@ import {
 } from "../utils/sign";
 const { setBalance } = require("@nomicfoundation/hardhat-network-helpers");
 import dotenv from "dotenv";
+import { curveExecutorSol } from "../typechain-types/src";
 dotenv.config();
 
 describe("DVP tests", async () => {
   let register: Register;
   let dvp: DVP;
+  let curveExec: CashTokenExecutor
+  let fakeCurvePool: FakeCurvePool
   let primaryIssuance: PrimaryIssuance;
-  let cash: Cash;
+  let eur: Cash;
+  let usd: Cash;
   let accounts: Signer[];
   let cak: Signer;
   let bnd: Signer;
@@ -96,8 +104,10 @@ describe("DVP tests", async () => {
       .enableInvestorToWhitelist(await investorB.getAddress());
 
     console.log("Deploying cash");
-    const cashFactory = await ethers.getContractFactory("Cash");
-    cash = await cashFactory.connect(centralBanker).deploy();
+    const eurFactory = await ethers.getContractFactory("Cash");
+    const usdFactory = await ethers.getContractFactory("Cash");
+    eur = await eurFactory.connect(centralBanker).deploy();
+    usd = await eurFactory.connect(centralBanker).deploy();
 
     console.log(
       "The CAK registers the PrimaryIssuance and the DVP smart contracts"
@@ -164,6 +174,9 @@ describe("DVP tests", async () => {
 
     const DVPFactoryFactory = await ethers.getContractFactory("DVPFactory");
 
+    const CurveExecFactory  = await ethers.getContractFactory("curveExec");
+    const FakeCurvePoolFactory  = await ethers.getContractFactory("fakeCurvePool");
+
     let dvpFactory: DVPFactory = await DVPFactoryFactory.deploy(
       await dvpLogic.getAddress()
     );
@@ -176,7 +189,24 @@ describe("DVP tests", async () => {
     const DVPContract = await ethers.getContractFactory("DVP");
     dvp = DVPContract.attach(dvpAddress);
 
-    await cash.connect(centralBanker).transfer(investorA, 1000);
+    let fakeCurvePool: FakeCurvePool = await FakeCurvePoolFactory.deploy(
+      await eur.getAddress(),
+      await usd.getAddress()
+    );
+
+    let curveExec: CashTokenExecutor = await CurveExecFactory.deploy(
+      await eur.getAddress(),
+      await usd.getAddress(),
+      await fakeCurvePool.getAddress(),
+      await dvp.getAddress()
+    );
+
+    await eur.connect(centralBanker).transfer(investorA, 1000);
+
+    await eur.connect(centralBanker).transfer(fakeCurvePool.getAddress(), 2000);
+    await usd.connect(centralBanker).transfer(fakeCurvePool.getAddress(), 2000);
+    
+    await eur.connect(investorA).approve(curveExec.getAddress(), 100000000);
 
     // metadata MUST starts with the bytestring corresponding to keccak256("VALID MESSAGE") to let the different actors check the encrypted Metadata before approving the DVP
     const metadata = `704512f53a4efc15864acc3cf3e4e319cf66d48723acf6bd676c1ae7919a05dc
@@ -204,15 +234,15 @@ describe("DVP tests", async () => {
       signingKeyBnd.privateKey,
       true
     );
-    /*
+    
     await dvp.connect(bnd).setDetails(
       {
         encryptedMetadaHash:
           "0xbc36789e7a1e281436464229828f817d6612f7b477d66591ff96a9e064bcc98a",
         quantity: 1000,
         price: 1 * 10 ** 18,
-        cashToken: await cash.getAddress(),
-        cashTokenExecutor: "0x0000000000000000000000000000000000000000", // no need for a cash executor
+        cashToken: await usd.getAddress(),
+        cashTokenExecutor: await curveExec.getAddress(),
         securityToken: await register.getAddress(),
         buyer: await investorA.getAddress(),
         seller: await bnd.getAddress(),
@@ -225,6 +255,6 @@ describe("DVP tests", async () => {
         { iv: "0x00", ephemPublicKey: "0x00", ciphertext: "0x00", mac: "0x00" },
         { iv: "0x00", ephemPublicKey: "0x00", ciphertext: "0x00", mac: "0x00" },
       ]
-    );*/
+    );
   });
 });

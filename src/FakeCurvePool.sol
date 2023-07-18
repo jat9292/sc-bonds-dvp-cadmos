@@ -12,15 +12,13 @@ contract FakeCurvePool {
 
     address immutable eurToken;
     address immutable usdToken;
-    address immutable chfToken;
     uint256 wad = 1e18;
     uint256 constant eurusd = 110*1e16; //1.10
         /* ========== CONSTRUCTOR ========== */
 
-    constructor(address eurToken_, address usdToken_, address chfToken_) {
+    constructor(address eurToken_, address usdToken_) {
         eurToken = eurToken_;
         usdToken = usdToken_;
-        chfToken = chfToken_;
     }
 
 
