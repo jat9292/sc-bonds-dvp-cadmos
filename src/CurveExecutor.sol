@@ -20,7 +20,9 @@ interface ICurveDeposit{
   ) external view returns (uint256);
 }
 
-contract CashTokenExecutor is Ownable{
+contract CurveExecutor is Ownable{
+
+    uint256 internal constant MAX_INT = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
 
     address immutable eurToken;
     address immutable usdToken;
@@ -36,6 +38,10 @@ contract CashTokenExecutor is Ownable{
         usdToken = usdToken_;
         poolCurve = poolCurve_;
         dvp = dvp_;
+        Cash(eurToken).approve(
+                            poolCurve,
+                            MAX_INT
+                        );
     }
 
 
@@ -57,8 +63,7 @@ contract CashTokenExecutor is Ownable{
         ICurveDeposit(poolCurve).exchange(i, j, dx, settlementAmount); 
 
 
-        Cash(eurToken).transferFrom(
-                            address(this),
+        Cash(usdToken).transfer(
                             _seller,
                             settlementAmount
                         );

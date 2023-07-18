@@ -12,8 +12,8 @@ contract FakeCurvePool {
 
     address immutable eurToken;
     address immutable usdToken;
-    uint256 wad = 1e18;
-    uint256 constant eurusd = 110*1e16; //1.10
+    uint256 wad = 10e18;
+    uint256 constant eurusd = 110*10e16; //1.10
         /* ========== CONSTRUCTOR ========== */
 
     constructor(address eurToken_, address usdToken_) {
@@ -50,8 +50,7 @@ function exchange(
                             address(this),
                             dx
                         );
-        Cash(usdToken).transferFrom(
-                            address(this),
+        Cash(usdToken).transfer(
                             msg.sender,
                             dy
                         );
