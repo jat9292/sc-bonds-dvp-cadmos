@@ -58,6 +58,7 @@ function remove0x(encryptedAES_: Encrypted): Encrypted {
 describe("DVP tests", async () => {
   let register: Register;
   let dvp: DVP;
+  let dvpLogic: DVP;
   let primaryIssuance: PrimaryIssuance;
   let cash: Cash;
   let accounts: Signer[];
@@ -154,15 +155,15 @@ describe("DVP tests", async () => {
     await register.enableContractToWhitelist(hash);
 
     const DVPLogicFactory = await ethers.getContractFactory("DVP");
-    let dvpLogic = await DVPLogicFactory.deploy();
+    dvpLogic = await DVPLogicFactory.deploy();
 
     const DVPFactoryFactory = await ethers.getContractFactory("DVPFactory");
 
-    const dvpFactory: DVPFactory = await DVPFactoryFactory.deploy(
+    const dvpFactoryTest: DVPFactory = await DVPFactoryFactory.deploy(
       dvpLogic.getAddress()
     );
 
-    const tx = await dvpFactory.createDVP();
+    const tx = await dvpFactoryTest.createDVP();
 
     const txReceipt = await tx.wait(1);
     console.log("Test DVP sc deployed to: " + txReceipt.logs[2].args[0]);
@@ -196,9 +197,6 @@ describe("DVP tests", async () => {
   });
 
   it("DVP from BND to Investor in same currency unit (no cashTokenExecutor)", async () => {
-    const DVPLogicFactory = await ethers.getContractFactory("DVP");
-    const dvpLogic = await DVPLogicFactory.deploy();
-
     const DVPFactoryFactory = await ethers.getContractFactory("DVPFactory");
 
     let dvpFactory: DVPFactory = await DVPFactoryFactory.deploy(
@@ -300,8 +298,6 @@ describe("DVP tests", async () => {
     // so in this case the bnd can approve directly and, because he is the setllement operator,
     // dvp will be executed in the same approve transaction
 
-    const hash3 = await register.atReturningHash(dvp);
-    await register.enableContractToWhitelist(hash3);
     console.log(
       "Cash of investorA before DVP : ",
       await cash.balanceOf(investorA.getAddress())
