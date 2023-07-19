@@ -48,18 +48,19 @@ function remove0x(encryptedAES_: Encrypted): Encrypted {
         : encryptedAES_.ephemPublicKey,
     ciphertext:
       encryptedAES_.ciphertext.slice(0, 2) == "0x"
-        ? "0x" + encryptedAES_.ciphertext.slice(2)
+        ? encryptedAES_.ciphertext.slice(2)
         : encryptedAES_.ciphertext,
     mac:
       encryptedAES_.mac.slice(0, 2) == "0x"
-        ? "0x" + encryptedAES_.mac.slice(2)
+        ? encryptedAES_.mac.slice(2)
         : encryptedAES_.mac,
   };
 }
 
-describe("DVP tests", async () => {
+describe("Atomic DVP + Forex test", async () => {
   let register: Register;
   let dvp: DVP;
+  let dvpLogic: DVP;
   let curveExec: CashTokenExecutor;
   let fakeCurvePool: FakeCurvePool;
   let primaryIssuance: PrimaryIssuance;
@@ -161,15 +162,15 @@ describe("DVP tests", async () => {
     await register.enableContractToWhitelist(hash);
 
     const DVPLogicFactory = await ethers.getContractFactory("DVP");
-    let dvpLogic = await DVPLogicFactory.deploy();
+    dvpLogic = await DVPLogicFactory.deploy();
 
     const DVPFactoryFactory = await ethers.getContractFactory("DVPFactory");
 
-    const dvpFactory: DVPFactory = await DVPFactoryFactory.deploy(
-      await dvpLogic.getAddress()
+    const dvpFactoryTest: DVPFactory = await DVPFactoryFactory.deploy(
+      dvpLogic.getAddress()
     );
 
-    const tx = await dvpFactory.createDVP();
+    const tx = await dvpFactoryTest.createDVP();
 
     const txReceipt = await tx.wait(1);
     console.log("Test DVP sc deployed to: " + txReceipt.logs[2].args[0]);
@@ -202,19 +203,16 @@ describe("DVP tests", async () => {
     expect(balanceOfBnD).to.be.equal("10000000");
   });
 
-  it("DVP from BND to Investor in same currency unit (no cashTokenExecutor)", async () => {
-    const DVPLogicFactory = await ethers.getContractFactory("DVP");
-    const dvpLogic = await DVPLogicFactory.deploy();
-
+  it("DVP from BND to Investor in different currencies, using a cashTokenExecutor for flash-swapping currencies on an AMM like Curve", async () => {
     const DVPFactoryFactory = await ethers.getContractFactory("DVPFactory");
+
+    let dvpFactory: DVPFactory = await DVPFactoryFactory.deploy(
+      dvpLogic.getAddress()
+    );
 
     const CurveExecFactory = await ethers.getContractFactory("CurveExecutor");
     const FakeCurvePoolFactory = await ethers.getContractFactory(
       "FakeCurvePool"
-    );
-
-    let dvpFactory: DVPFactory = await DVPFactoryFactory.deploy(
-      await dvpLogic.getAddress()
     );
 
     const tx = await dvpFactory.connect(bnd).createDVP(); // the BND is the setllement operator
@@ -298,23 +296,36 @@ Time
     // to an AES key which can, in turn, be used to decrypt a valid message from the encrypted metadata
     // NOTE : the validity check is not sufficient by itself, in practise the buyer should then read the
     // decrypted message to ensure that he agrees on the terms before doing the approve transaction
+    let isValidOnce = false;
+    let validMessage: string;
     for (let i = 0; i < EncryptedAESwithECIESArray.length; i++) {
       try {
         let [isValid, decryptedMessage] = await decryptWithPrivateKeyAndAES(
-          encryptedMetadataLog.slice(2),
+          Buffer.from(encryptedMetadataLog.slice(2), "hex"),
           remove0x(EncryptedAESwithECIESArray[i]),
           signingKeyInvestorA.privateKey.slice(2),
           true
         );
-        console.log(isValid);
-      } catch (error) {
-        console.log(error.message);
-      }
+        if (isValid) {
+          isValidOnce = true;
+          validMessage = decryptedMessage;
+        }
+      } catch {}
     }
+
+    if (isValidOnce) {
+      console.log(
+        "Integrity check : the buyer was succesfully able to decrypt the metadata!"
+      );
+      console.log("------- Decrypted Message -------");
+      console.log(validMessage);
+    }
+
+    expect(isValidOnce).to.be.true; // buyer should be able to validate the encrypted metadata
 
     // if previous check convinced the buyer that metadata is valid and he agrees on the terms,
     // he approves the dvp to spend the needed amount of cashToken and then calls approve on dvp
-
+    console.log("-------- Setting up the DVP --------");
     await eur
       .connect(investorA)
       .approve(curveExec.getAddress(), 10000000000000000n * 10n ** 18n);
@@ -336,9 +347,6 @@ Time
     // so in this case the bnd can approve directly and, because he is the setllement operator,
     // dvp will be executed in the same approve transaction
 
-    const hash3 = await register.atReturningHash(dvp);
-    await register.enableContractToWhitelist(hash3);
-    console.log("-------- Executing DVP --------");
     console.log("Trade Details:", {
       encryptedMetadaHash: ethers.keccak256(encryptedMetadata),
       quantity: 10000000,
@@ -346,10 +354,13 @@ Time
       cashToken: await usd.getAddress(),
       cashTokenExecutor: await curveExec.getAddress(),
       securityToken: await register.getAddress(),
-      buyer: investorA.getAddress(),
-      seller: bnd.getAddress(),
+      buyer: await investorA.getAddress(),
+      seller: await bnd.getAddress(),
     });
-    console.log("----------------");
+
+    console.log("------- Setup of DVP is done -------");
+    console.log("\n");
+    console.log("------- Executing DVP -------");
     console.log("- State Before:");
     console.log(
       "EUR of Buyer before DVP : ",
@@ -375,6 +386,8 @@ Time
       "Security token quantity of Seller before DVP : ",
       Number(await register.balanceOf(bnd.getAddress()))
     );
+    expect(await register.balanceOf(bnd.getAddress())).to.be.equal(10000000);
+    expect(await register.balanceOf(investorA.getAddress())).to.be.equal(0);
     console.log("-------- ATOMIC SWAP! --------");
     await dvp.connect(bnd).approve({
       encryptedMetadaHash: ethers.keccak256(encryptedMetadata),
@@ -383,8 +396,8 @@ Time
       cashToken: await usd.getAddress(),
       cashTokenExecutor: await curveExec.getAddress(),
       securityToken: register.getAddress(),
-      buyer: investorA.getAddress(),
-      seller: bnd.getAddress(),
+      buyer: await investorA.getAddress(),
+      seller: await bnd.getAddress(),
       tradeDate: 123,
       valueDate: 234,
     });
@@ -415,5 +428,9 @@ Time
       Number(await register.balanceOf(bnd.getAddress()))
     );
     console.log("-------- END DVP --------");
+    expect(await register.balanceOf(bnd.getAddress())).to.be.equal(0);
+    expect(await register.balanceOf(investorA.getAddress())).to.be.equal(
+      10000000
+    );
   });
 });

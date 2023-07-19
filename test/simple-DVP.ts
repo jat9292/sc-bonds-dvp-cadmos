@@ -294,7 +294,18 @@ describe("Simple Atomic DVP test", async () => {
     }
 
     expect(isValidOnce).to.be.true; // buyer should be able to validate the encrypted metadata
-    console.log("DECIMALS ", await register.decimals());
+
+    console.log("-------- Setting up the DVP --------");
+    console.log("Trade Details:", {
+      encryptedMetadaHash: ethers.keccak256(encryptedMetadata),
+      quantity: 1000,
+      price: 1,
+      cashToken: await cash.getAddress(),
+      cashTokenExecutor: "0x0000000000000000000000000000000000000000", // no need for a cashTokenExecutor in the simple atomic dvp
+      securityToken: await register.getAddress(),
+      buyer: await investorA.getAddress(),
+      seller: await bnd.getAddress(),
+    });
     // if previous check convinced the buyer that metadata is valid and he agrees on the terms,
     // he approves the dvp to spend the needed amount of cashToken and then calls approve on dvp
     await cash.connect(investorA).approve(dvp.getAddress(), 1000n * 10n ** 18n);
@@ -303,7 +314,7 @@ describe("Simple Atomic DVP test", async () => {
       quantity: 1000,
       price: 10n ** 18n,
       cashToken: cash.getAddress(),
-      cashTokenExecutor: "0x0000000000000000000000000000000000000000", // no need for a cash executor
+      cashTokenExecutor: "0x0000000000000000000000000000000000000000", // no need for a cashTokenExecutor in the simple atomic dvp
       securityToken: register.getAddress(),
       buyer: investorA.getAddress(),
       seller: bnd.getAddress(),
@@ -315,7 +326,9 @@ describe("Simple Atomic DVP test", async () => {
     // metadata but this check in this special case is optional, because he is also the settlement operator
     // so in this case the bnd can approve directly and, because he is the setllement operator,
     // dvp will be executed in the same approve transaction
-
+    console.log("\n");
+    console.log("------- Executing DVP -------");
+    console.log("- State Before:");
     console.log(
       "Cash of Buyer before DVP : \x1b[93;1m",
       Number((await cash.balanceOf(investorA.getAddress())) / 10n ** 18n) +
@@ -339,7 +352,8 @@ describe("Simple Atomic DVP test", async () => {
     expect(await cash.balanceOf(investorA.getAddress())).to.be.equal(
       1000n * 10n ** 18n
     );
-    console.log("-------- Executing DVP --------");
+    console.log("-------- ATOMIC SWAP! --------");
+    console.log("- State After:");
     await dvp.connect(bnd).approve({
       encryptedMetadaHash: ethers.keccak256(encryptedMetadata),
       quantity: 1000,
